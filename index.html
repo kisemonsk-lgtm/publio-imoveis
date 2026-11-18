@@ -75,9 +75,11 @@
         </div>
 
         <label class="campo">
-          <span>Imagem da casa</span>
-          <input id="f-imagem" type="file" accept="image/*" />
+          <span>Fotos da casa (pode escolher várias)</span>
+          <input id="f-imagem" type="file" accept="image/*" multiple />
         </label>
+        <div id="miniaturas" class="miniaturas"></div>
+        <p id="fotosInfo" class="fotos-info">Nenhuma foto escolhida</p>
 
         <label class="campo">
           <span>Descrição</span>
@@ -117,6 +119,9 @@
     <article class="ficha-card">
       <div class="ficha-imagem-wrap">
         <img id="fichaImagem" alt="Foto do imóvel" />
+        <button type="button" class="seta seta-esq" id="setaEsq" aria-label="Foto anterior">‹</button>
+        <button type="button" class="seta seta-dir" id="setaDir" aria-label="Próxima foto">›</button>
+        <span class="contador-fotos" id="contadorFotos" hidden></span>
       </div>
 
       <div class="ficha-corpo">
@@ -137,6 +142,7 @@
           <button id="btnCopiarDescricao" class="btn btn-destaque">⧉ Copiar descrição</button>
           <button id="btnCopiarTudo" class="btn btn-neutro">⧉ Copiar imagem + descrição</button>
         </div>
+        <div id="miniaturasFicha" class="miniaturas-ficha" hidden></div>
         <p id="avisoFicha" class="aviso" hidden></p>
       </div>
     </article>
