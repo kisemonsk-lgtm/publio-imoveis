@@ -728,3 +728,65 @@ input:focus, select:focus, textarea:focus {
 }
 .resumo-adm li:last-child { border-bottom: 0; }
 .resumo-adm b { color: var(--ouro-claro); font-size: 1.05rem; }
+
+/* ---------------- cadastro só pela descrição ---------------- */
+.form-dica {
+  margin: 0 0 12px;
+  font-size: .86rem;
+  line-height: 1.45;
+  opacity: .78;
+}
+.dados-lidos {
+  margin: -6px 0 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: .84rem;
+  line-height: 1.4;
+  background: rgba(212, 175, 55, .10);
+  border: 1px solid rgba(212, 175, 55, .30);
+  color: #f0e2b8;
+}
+.ajustes {
+  margin: 12px 0;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, .02);
+}
+.ajustes > summary {
+  cursor: pointer;
+  font-size: .88rem;
+  font-weight: 600;
+  opacity: .9;
+}
+.ajustes[open] > summary { margin-bottom: 10px; }
+.campo-rotulo {
+  margin: 12px 0 4px;
+  font-size: .82rem;
+  font-weight: 600;
+  opacity: .8;
+}
+.videos-miniaturas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.video-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--borda);
+  background: #100f0b;
+  font-size: .82rem;
+}
+.video-icone { color: #e8c766; }
+.video-nome {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .85;
+}

@@ -55,3 +55,26 @@ No painel do corretor, o botão **👁️ Área do cliente** abre essa página p
 - Funciona offline depois de carregado, e pode ser instalado na tela inicial do celular.
 - Não há backend: os imóveis ficam no navegador de quem cadastra. Para acessar o mesmo
   acervo de outro aparelho, use o link da ficha de cada imóvel.
+
+## Cadastro rápido: só a descrição
+
+No painel do corretor agora existe **um campo principal: a descrição**. Cole ali o texto
+do imóvel do jeito que você já escreve no WhatsApp e o sistema tira sozinho:
+
+- **preço** (procura `R$ 450.000,00`, `450.000` etc.)
+- **cidade / bairro** (linhas como `Centro — São Luís/MA`, `Bairro Jardim, Cidade`)
+- **tipo** (casa, apartamento, terreno, sítio, galpão, sala comercial)
+- **finalidade** (venda ou aluguel)
+- **título** (a primeira linha da descrição)
+
+Os campos manuais ficam dentro de *Ajustar os dados lidos (opcional)*, e só são usados se
+você preencher — caso contrário vale o que foi lido da descrição.
+
+## Fotos e vídeos
+
+- Até **300 fotos** por imóvel (comprimidas no aparelho antes de subir)
+- Até **5 vídeos** por imóvel, 50 MB cada (vão para o bucket `fotos`, pasta `videos/`)
+- Na página do cliente os vídeos aparecem dentro do anúncio, com play
+
+> Rode o trecho final do `SUPABASE.sql` uma vez no SQL Editor do Supabase: ele cria a
+> coluna `videos` e libera 50 MB no bucket.

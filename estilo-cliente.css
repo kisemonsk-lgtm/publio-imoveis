@@ -453,3 +453,17 @@ body.casa-aberta { overflow: hidden; }
   .casa:hover { transform: none; }
   .casa:hover .casa-foto img { transform: none; }
 }
+
+/* ---------------- vídeos do imóvel ---------------- */
+.casa-modal-videos {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+.casa-video {
+  width: 100%;
+  max-height: 62vh;
+  border-radius: 12px;
+  background: #000;
+  display: block;
+}

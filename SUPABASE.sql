@@ -134,3 +134,21 @@ create policy "pedidos le"    on public.pedidos_acesso for select using (true);
 create policy "pedidos grava" on public.pedidos_acesso for insert with check (true);
 create policy "pedidos apaga" on public.pedidos_acesso for delete using (true);
 grant select, insert, delete on public.pedidos_acesso to anon, authenticated;
+
+
+-- ============================================================
+--  Vídeos e muitas fotos (rode este trecho no banco que já existe)
+-- ============================================================
+
+-- coluna dos vídeos do imóvel (lista de endereços)
+alter table public.imoveis add column if not exists videos text[] default '{}';
+
+-- vídeos ficam no mesmo bucket "fotos", na pasta videos/
+-- (nenhuma mudança de policy é necessária: o bucket já aceita envio e leitura)
+
+-- se o bucket estiver limitado a 5 MB, suba o limite para 50 MB:
+update storage.buckets set file_size_limit = 52428800, allowed_mime_types = null where id = 'fotos';
+
+select 'coluna videos criada' as resultado,
+       (select count(*) from information_schema.columns
+         where table_schema='public' and table_name='imoveis' and column_name='videos') as tem_coluna;

@@ -107,7 +107,7 @@ function sbHeaders(extra = {}) {
 function sbUrl(caminho) {
   return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho;
 }
-const CAMPOS_IMOVEL = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
+const CAMPOS_IMOVEL = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,videos,criadoEm,atualizadoEm";
 
 async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   let ultimo;
@@ -140,6 +140,7 @@ async function nuvemLer() {
     descricao: l.descricao || "",
     imagem: l.imagem || "",
     imagens: Array.isArray(l.imagens) ? l.imagens : (l.imagem ? [l.imagem] : []),
+    videos: Array.isArray(l.videos) ? l.videos.filter(Boolean) : [],
     criadoEm: Number(l.criadoEm) || Date.now(),
     atualizadoEm: Number(l.atualizadoEm) || Date.now()
   }));
@@ -183,6 +184,7 @@ async function nuvemSalvarUm(im) {
     descricao: im.descricao || "",
     imagem: im.imagem || "",
     imagens: imagensDe(im),
+    videos: Array.isArray(im.videos) ? im.videos.filter(Boolean) : [],
     criadoEm: im.criadoEm || Date.now(),
     atualizadoEm: im.atualizadoEm || Date.now()
   };
@@ -249,6 +251,28 @@ async function enviarFotoParaServidor(dataUrl) {
     let detalhe = "";
     try { detalhe = (await r.json()).message || ""; } catch (_) { detalhe = ""; }
     throw new Error("o envio da foto falhou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
+  }
+  return sbStorageUrl(caminho);
+}
+
+/* Envia um vídeo (ou qualquer arquivo) para o Storage do Supabase */
+async function enviarArquivoParaServidor(arquivo, pasta, extensao) {
+  const caminho = pasta + "/" + novoId() + "." + extensao;
+  const r = await fetch(SUPABASE.url.replace(/\/$/, "") + "/storage/v1/object/" + SUPABASE.bucket + "/" + caminho, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE.chave,
+      "Authorization": "Bearer " + SUPABASE.chave,
+      "Content-Type": arquivo.type || "application/octet-stream",
+      "x-upsert": "true",
+      "cache-control": "public, max-age=31536000"
+    },
+    body: arquivo
+  });
+  if (!r.ok) {
+    let detalhe = "";
+    try { detalhe = (await r.json()).message || ""; } catch (_) { detalhe = ""; }
+    throw new Error("o envio falhou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
   }
   return sbStorageUrl(caminho);
 }
@@ -519,8 +543,10 @@ function tamanhoImovel(im) {
   return bytesFotos + texto;
 }
 const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (as fotos ficam no Storage)
-const MAX_FOTOS = 30;            // fotos por imóvel (as fotos ficam no Storage)
+const MAX_FOTOS = 300;           // fotos por imóvel (as fotos ficam no Storage)
 const LIMITE_FOTO = 5000000;     // 5 MB por foto (limite do bucket)
+const MAX_VIDEOS = 5;            // vídeos por imóvel
+const LIMITE_VIDEO = 50 * 1024 * 1024;   // 50 MB por vídeo
 
 async function copiarTexto(texto) {
   try {
@@ -604,16 +630,19 @@ function linkDaFicha(im) {
 function limparForm() {
   editandoId = null;
   imagemAtual = [];
+  videosAtual = [];
   $("#form").reset();
   $("#btnSalvar").textContent = "Salvar imóvel";
   $("#f-imagem").value = "";
   renderMiniaturas();
+  renderVideos();
   aviso($("#avisoForm"), "");
 }
 
 function preencherForm(im) {
   editandoId = im.id;
   imagemAtual = imagensDe(im).slice();
+  videosAtual = (Array.isArray(im.videos) ? im.videos : []).map((u, i) => ({ arquivo: null, url: u, nome: "vídeo " + (i + 1), tipo: "" }));
   $("#f-titulo").value = im.titulo || "";
   $("#f-tipo").value = im.tipo || "Casa";
   $("#f-finalidade").value = im.finalidade || "Venda";
@@ -622,9 +651,197 @@ function preencherForm(im) {
   $("#f-descricao").value = im.descricao || "";
   $("#f-imagem").value = "";
   renderMiniaturas();
+  renderVideos();
   $("#btnSalvar").textContent = "Atualizar imóvel";
   window.scrollTo({ top: 0, behavior: "smooth" });
   $("#f-titulo").focus();
+}
+
+/* ---------------- Vídeos do imóvel ---------------- */
+let videosAtual = [];      // [{ arquivo, url, nome, tipo }]
+
+function renderVideos() {
+  const box = document.getElementById("videosMiniaturas");
+  if (box) {
+    box.innerHTML = videosAtual.map((v, i) => `
+      <div class="video-mini">
+        <span class="video-icone">▶</span>
+        <span class="video-nome">${escapar(v.nome || "vídeo")}</span>
+        <button type="button" class="mini-x" data-video="${i}" title="Remover vídeo">×</button>
+      </div>`).join("");
+  }
+  const cont = document.getElementById("videosInfo");
+  if (cont) {
+    cont.textContent = videosAtual.length
+      ? `${videosAtual.length} de ${MAX_VIDEOS} vídeos`
+      : "Nenhum vídeo escolhido";
+  }
+}
+
+/* ---------------- Ler a descrição e tirar dali os dados do anúncio ----------------
+   O corretor cola a descrição pronta (do jeito que ele já escreve no WhatsApp)
+   e o sistema tira sozinho: preço, cidade/bairro, tipo, finalidade e um título. */
+function numeroBR(t) {
+  const limpo = String(t).replace(/\./g, "").replace(",", ".");
+  const n = Number(limpo);
+  return isFinite(n) ? n : 0;
+}
+
+function lerDescricao(texto) {
+  const t = String(texto || "").replace(/\r/g, "");
+  const linhas = t.split("\n").map((l) => l.trim()).filter(Boolean);
+  const res = { preco: "", local: "", tipo: "", finalidade: "", titulo: "" };
+
+  /* ---- preço ---- */
+  const mPreco = t.match(/R\$\s*([\d.]+(?:,\d{1,2})?)/i);
+  if (mPreco) {
+    const n = numeroBR(mPreco[1]);
+    if (n > 0) res.preco = n.toFixed(2).replace(".", ",");
+  } else {
+    const mNum = t.match(/(?:^|\s)(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)(?:\s|$)/);
+    if (mNum) {
+      const n = numeroBR(mNum[1]);
+      if (n >= 1000) res.preco = n.toFixed(2).replace(".", ",");
+    }
+  }
+
+  /* ---- finalidade ---- */
+  if (/para\s+(aluguel|alugar|locar|loca[çc][ãa]o)|\baluga-se\b|\balugo\b|\bloca[çc][ãa]o\b|\bmensalidade\b/i.test(t)) res.finalidade = "Aluguel";
+  else if (/para\s+venda|\bvende-se\b|\ba venda\b|\bcomprar\b|\bvendo\b/i.test(t)) res.finalidade = "Venda";
+  else if (/\baluguel\b|\baluga\b|\blocado\b/i.test(t)) res.finalidade = "Aluguel";
+  else if (/\bvenda\b|\bvender\b/i.test(t)) res.finalidade = "Venda";
+
+  /* ---- tipo ---- */
+  const tipos = [
+    [/\bapartamento\b|\bapto\b|\bflat\b|\bkitnet\b|\bstudio\b/i, "Apartamento"],
+    [/\bs[íi]tio\b|\bch[áa]cara\b|\bfazenda\b|\brural\b/i, "Sítio / Chácara"],
+    [/\bgalp[ãa]o\b|\barmaz[ée]m\b|\bbarrac[ãa]o\b/i, "Galpão / Armazém"],
+    [/\bsala comercial\b|\bloja\b|\bponto comercial\b|\bescrit[óo]rio\b/i, "Sala comercial"],
+    [/\bterreno\b|\blote\b|\b[áa]rea\b|\bch[áa]cara de terreno\b/i, "Terreno"],
+    [/\bcasa\b|\bsobrado\b|\bch[áa]let\b/i, "Casa"]
+  ];
+  for (const [re, nome] of tipos) { if (re.test(t)) { res.tipo = nome; break; } }
+
+  /* ---- cidade / bairro ----
+     1) linha de endereço: "Rua X, Bairro — Cidade/UF", "Bairro, Cidade"
+     2) senão, o lugar citado logo depois de "no/na/em/do/da" numa linha curta
+     3) senão, a primeira linha de endereço que aparecer no meio do texto */
+  const PISTAS = /\b(rua|avenida|av\.|bairro|centro|jardim|jardins|vila|parque|pra[çc]a|alameda|travessa|rodovia|estrada|km|zona)\b/i;
+  const UFS = "AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO";
+  const uf = new RegExp("\\b(" + UFS.split(" ").join("|") + ")\\b");
+
+  function limpaLocal(l) {
+    return l
+      .replace(/^(localiza[çc][ãa]o|local|cidade|endere[çc]o|bairro)\s*[:\-–]\s*/i, "")
+      .replace(/\s*[.,;]+$/, "")
+      .trim();
+  }
+
+  /* sinais de que a linha NÃO é endereço: quartos, metros, valores, itens da casa */
+  const NAO_ENDERECO = /\b\d+\s*(quartos?|su[íi]tes?|vagas?|banheiros?|m2|m²|metros?|hectares?|carros?)\b|\b\d+\s*x\s*\d+\b|\b(piscina|quintal|garagem|mobiliado|mobiliada|documenta[çc][ãa]o|aceita|financiamento|fgts|entrada|parcel)/i;
+
+  function ehLinhaDeEndereco(l) {
+    if (/R\$/i.test(l) || l.length > 110) return false;
+    if (NAO_ENDERECO.test(l)) return false;
+    return /[—–]|\s-\s|\/|,/.test(l);
+  }
+
+  /* Pontua cada pedaço de uma linha de endereço e escolhe os que são lugar */
+  function pedacosDeLugar(l, manterRua) {
+    const partes = l.split(/[—–]|\s-\s|\/|,/).map((x) => x.trim()).filter(Boolean);
+    const lugares = [];
+    for (const p of partes) {
+      if (p.length < 3 || /^\d+$/.test(p)) continue;
+      if (NAO_ENDERECO.test(p)) continue;
+      if (!manterRua && /\b(rua|avenida|av\.|travessa|alameda|rodovia|estrada)\b/i.test(p) && /\d/.test(p)) continue; // rua com número: é endereço, não cidade
+      lugares.push(p);
+    }
+    return lugares;
+  }
+
+  let local = "";
+  // 1) a linha mais "de endereço": tem separador e cidade/bairro depois dele
+  let melhor = 0;
+  for (const l of linhas) {
+    if (!ehLinhaDeEndereco(l)) continue;
+    const lugares = pedacosDeLugar(l);
+    if (!lugares.length) continue;
+    let nota = 0;
+    if (uf.test(l)) nota += 5;
+    if (PISTAS.test(l)) nota += 3;
+    if (lugares.length >= 2) nota += 2;
+    // com UF na linha, o nome da rua é bem-vindo (é a localização completa)
+    const finais = uf.test(l) ? pedacosDeLugar(l, true) : lugares;
+    if (nota > melhor) { melhor = nota; local = finais.join(", "); }
+  }
+  // 2a) "no bairro X" / "bairro X" solto no texto
+  if (!local) {
+    const mBairro = t.match(/\bbairro\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÀ-ÿ'’ ]{2,40})/);
+    if (mBairro) local = mBairro[1].replace(/\s+(com|de|do|da|que|e)\s.*$/i, "").trim();
+  }
+  // 2b) lugar depois de "no/na/em/do/da" numa linha curta (o título costuma ser assim)
+  if (!local) {
+    const lugares = "centro|jardim|jardins|vila|parque|bairro|praia|pra[çc]a|alameda|zona rural|renascen[çc]a|calhau|olho d.água|cohatrac|turu|ara[çc]agi|forquilha|f[ée] em deus|cidade oper[áa]ria|s[ãa]o lu[íi]s|imperatriz|ros[áa]rio|pa[çc]o do lumiar|rap[óo]sa";
+    const re = new RegExp("\\b(?:no|na|em|do|da|nos|nas)\\s+(?:bairro\\s+(?:de\\s+|do\\s+|da\\s+)?)?((?:[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\\wÀ-ÿ'’]*|" + lugares + ")(?:\\s+(?:de|do|da|dos|das)?\\s*(?:[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\\wÀ-ÿ'’]*|" + lugares + ")){0,3})", "i");
+    for (const l of linhas) {
+      if (/R\$/i.test(l) || l.length > 110) continue;
+      if (NAO_ENDERECO.test(l)) continue;
+      const m = l.match(re);
+      if (m) { local = m[1].trim(); break; }
+    }
+  }
+  // 3) qualquer linha que fale de endereço
+  if (!local) {
+    for (const l of linhas) {
+      if (!PISTAS.test(l) || l.length > 110 || /R\$/i.test(l) || NAO_ENDERECO.test(l)) continue;
+      const lugares = pedacosDeLugar(l);
+      local = lugares.length ? lugares.join(", ") : l;
+      break;
+    }
+  }
+  res.local = limpaLocal(local);
+
+  /* ---- título ---- */
+  const TITULO_OK = (l) => l.length >= 8 && l.length <= 90 && !/R\$\s*\d/i.test(l) &&
+    !/^[-–•*]/.test(l) && !/[—–]/.test(l) &&
+    !/\b(Rua|Avenida|Av\.|Travessa|Alameda|Rodovia|Estrada)\b/i.test(l) &&
+    !/\/\s*[A-Z]{2}\s*$/.test(l) &&
+    !/^\d+\s*x\s*\d+/i.test(l) &&
+    !/\b(\d+\s*(quartos?|su[íi]tes?|vagas?|banheiros?|m2|m²|metros?|hectares?)\s*(,|e\s+\d|$))/i.test(l) &&
+    !/^(documenta[çc][ãa]o|aceita|financia|obs|aten[çc][ãa]o)/i.test(l);
+  const primeira = linhas.find(TITULO_OK);
+  // se a primeira linha "de anúncio" for só um item (ex.: "Quintal e garagem"), prefere a
+  // primeira linha que fale de imóvel (casa, apartamento, terreno...) e caiba no título
+  const falaDeImovel = /\b(casa|casas|apartamento|apto|sobrado|terreno|lote|s[íi]tio|ch[áa]cara|galp[ãa]o|sala|loja|kitnet|flat|studio|im[óo]vel|ch[áa]let|edif[íi]cio)\b/i;
+  const comImovel = linhas.find((l) => TITULO_OK(l) && falaDeImovel.test(l));
+  const escolhida = comImovel || primeira;
+  if (escolhida) {
+    res.titulo = escolhida.replace(/[.!]+$/, "").trim();
+  } else {
+    const partes = [res.tipo, res.finalidade ? "para " + res.finalidade.toLowerCase() : ""].filter(Boolean);
+    res.titulo = partes.length ? partes.join(" ") : "Imóvel";
+  }
+  if (res.titulo.length > 80) res.titulo = res.titulo.slice(0, 80).replace(/\s+\S*$/, "") + "…";
+
+  return res;
+}
+
+/* Preenche os campos escondidos a partir da descrição */
+function aplicarDescricao() {
+  const texto = $("#f-descricao").value;
+  const d = lerDescricao(texto);
+  const info = document.getElementById("dadosLidos");
+  if (!d.preco && !d.local && !d.tipo) {
+    if (info) info.textContent = "Ainda não achei preço nem cidade na descrição.";
+    return d;
+  }
+  const pedacos = [];
+  if (d.preco) pedacos.push("preço " + fmtPreco(d.preco));
+  if (d.local) pedacos.push("local " + d.local);
+  if (d.tipo) pedacos.push(d.tipo);
+  if (d.finalidade) pedacos.push(d.finalidade);
+  if (info) info.textContent = "Li da descrição: " + pedacos.join(" • ");
+  return d;
 }
 
 /* Minuaturas das fotos no formulário */
@@ -667,31 +884,57 @@ async function salvarForm(ev) {
     aviso($("#avisoForm"), "Este aparelho não tem permissão para publicar imóveis. Peça ao corretor para liberar em Área do corretor.", true);
     return;
   }
-  const titulo = $("#f-titulo").value.trim();
-  if (!titulo) {
-    aviso($("#avisoForm"), "Informe o título do anúncio.", true);
+  const descricao = $("#f-descricao").value.trim();
+  if (!descricao) {
+    aviso($("#avisoForm"), "Cole a descrição do imóvel — o resto o sistema tira dali.", true);
     return;
   }
   if (!imagemAtual.length && !editandoId) {
     aviso($("#avisoForm"), "Escolha pelo menos uma foto da casa.", true);
     return;
   }
-  if (!$("#f-descricao").value.trim()) {
-    aviso($("#avisoForm"), "Escreva a descrição do imóvel.", true);
-    return;
-  }
+
+  // preço, cidade/bairro, tipo, finalidade e título saem da descrição
+  const lido = lerDescricao(descricao);
+  const escolhido = (id) => {
+    const el = document.getElementById(id);
+    return el ? String(el.value || "").trim() : "";
+  };
+  const titulo = escolhido("f-titulo") || lido.titulo || "Imóvel";
+  const tipo = escolhido("f-tipo") || lido.tipo || "Casa";
+  const finalidade = escolhido("f-finalidade") || lido.finalidade || "Venda";
+  const preco = escolhido("f-preco") || lido.preco || "";
+  const local = escolhido("f-local") || lido.local || "";
 
   const anterior = editandoId ? imoveis.find((x) => x.id === editandoId) : null;
+
+  // vídeos escolhidos vão para o Storage (os que já têm endereço ficam como estão)
+  const videosUrls = [];
+  for (let i = 0; i < videosAtual.length; i++) {
+    const v = videosAtual[i];
+    if (v.url) { videosUrls.push(v.url); continue; }
+    if (!v.arquivo) continue;
+    aviso($("#avisoForm"), `Enviando vídeo ${i + 1} de ${videosAtual.length}...`);
+    try {
+      const ext = (v.nome.split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
+      videosUrls.push(await enviarArquivoParaServidor(v.arquivo, "videos", ext));
+      v.url = videosUrls[videosUrls.length - 1];
+    } catch (e) {
+      aviso($("#avisoForm"), "O vídeo não subiu: " + e.message, true);
+    }
+  }
+
   const im = {
     id: editandoId || novoId(),
     titulo,
-    tipo: $("#f-tipo").value,
-    finalidade: $("#f-finalidade").value,
-    preco: $("#f-preco").value.trim(),
-    local: $("#f-local").value.trim(),
-    descricao: $("#f-descricao").value.trim(),
+    tipo,
+    finalidade,
+    preco,
+    local,
+    descricao,
     imagem: imagemAtual[0] || "",
     imagens: imagemAtual.slice(),
+    videos: videosUrls,
     criadoEm: anterior ? (anterior.criadoEm || Date.now()) : Date.now(),
     atualizadoEm: Date.now()
   };
@@ -1155,6 +1398,18 @@ async function iniciar() {
 
   $("#form").addEventListener("submit", salvarForm);
   $("#btnLimpar").addEventListener("click", limparForm);
+
+  // enquanto digita/cola a descrição, mostra o que já foi lido dela
+  const campoDesc = $("#f-descricao");
+  if (campoDesc) {
+    let t = null;
+    const aoDigitar = () => {
+      clearTimeout(t);
+      t = setTimeout(aplicarDescricao, 400);
+    };
+    campoDesc.addEventListener("input", aoDigitar);
+    campoDesc.addEventListener("paste", () => setTimeout(aplicarDescricao, 60));
+  }
   $("#btnNovo").addEventListener("click", () => {
     limparForm();
     if (location.hash) location.hash = "";
@@ -1163,27 +1418,61 @@ async function iniciar() {
   });
 
   $("#f-imagem").addEventListener("change", async (ev) => {
-    const arquivos = Array.from(ev.target.files || []).filter((f) => f.type.startsWith("image/"));
-    if (!arquivos.length) return;
-    aviso($("#avisoForm"), `Preparando ${arquivos.length} foto(s)...`);
-    const novas = [];
-    for (const file of arquivos) {
-      try {
-        novas.push(await comprimirImagem(file));
-      } catch (e) {
-        aviso($("#avisoForm"), e.message, true);
-      }
-    }
-    imagemAtual = imagemAtual.concat(novas).slice(0, MAX_FOTOS);
+    const todos = Array.from(ev.target.files || []);
+    const arquivos = todos.filter((f) => f.type.startsWith("image/"));
+    const videos = todos.filter((f) => f.type.startsWith("video/"));
     ev.target.value = "";
-    renderMiniaturas();
-    if (!novas.length) {
-      aviso($("#avisoForm"), "Não consegui adicionar as fotos.", true);
-    } else if (imagemAtual.length >= MAX_FOTOS) {
-      aviso($("#avisoForm"), `Limite de ${MAX_FOTOS} fotos por imóvel atingido.`);
-    } else {
-      aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s). Total: ${imagemAtual.length} de ${MAX_FOTOS}.`);
+    if (!arquivos.length && !videos.length) return;
+
+    if (arquivos.length) {
+      aviso($("#avisoForm"), `Preparando ${arquivos.length} foto(s)... pode levar um pouco com muitas fotos.`);
+      const novas = [];
+      let feitas = 0;
+      for (const file of arquivos) {
+        try {
+          novas.push(await comprimirImagem(file));
+        } catch (e) {
+          aviso($("#avisoForm"), e.message, true);
+        }
+        feitas++;
+        if (arquivos.length > 20 && feitas % 5 === 0) {
+          aviso($("#avisoForm"), `Preparando fotos... ${feitas} de ${arquivos.length}`);
+          await new Promise((ok) => setTimeout(ok, 0));   // deixa a tela respirar
+        }
+      }
+      imagemAtual = imagemAtual.concat(novas).slice(0, MAX_FOTOS);
+      renderMiniaturas();
     }
+
+    if (videos.length) {
+      for (const v of videos) {
+        if (videosAtual.length >= MAX_VIDEOS) {
+          aviso($("#avisoForm"), `Máximo de ${MAX_VIDEOS} vídeos por imóvel.`, true);
+          break;
+        }
+        if (v.size > LIMITE_VIDEO) {
+          aviso($("#avisoForm"), `O vídeo "${v.name}" passa de 50 MB. Grave um mais curto ou reduza a qualidade.`, true);
+          continue;
+        }
+        videosAtual.push({ arquivo: v, url: "", nome: v.name, tipo: v.type });
+      }
+      renderVideos();
+    }
+
+    if (arquivos.length && imagemAtual.length >= MAX_FOTOS) {
+      aviso($("#avisoForm"), `Limite de ${MAX_FOTOS} fotos por imóvel atingido.`);
+    } else if (arquivos.length) {
+      aviso($("#avisoForm"), `${arquivos.length} foto(s) pronta(s). Total: ${imagemAtual.length} de ${MAX_FOTOS}.`);
+    }
+  });
+
+  const boxVideos = document.getElementById("videosMiniaturas");
+  if (boxVideos) boxVideos.addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-video]");
+    if (!b) return;
+    ev.preventDefault();
+    videosAtual.splice(Number(b.dataset.video), 1);
+    renderVideos();
   });
 
   const mini = document.getElementById("miniaturas");

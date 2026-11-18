@@ -71,6 +71,7 @@
           descricao: l.descricao || "",
           imagem: l.imagem || "",
           imagens: Array.isArray(l.imagens) ? l.imagens.filter(Boolean) : (l.imagem ? [l.imagem] : []),
+          videos: Array.isArray(l.videos) ? l.videos.filter(Boolean) : [],
           criadoEm: Number(l.criadoEm) || 0,
           atualizadoEm: Number(l.atualizadoEm) || 0
         };
@@ -210,6 +211,15 @@
     $("#casaModalDescricao").textContent = im.descricao || "";
     $("#casaModalDescricao").hidden = !im.descricao;
 
+    var boxVideos = $("#casaModalVideos");
+    var vids = Array.isArray(im.videos) ? im.videos.filter(Boolean) : [];
+    if (boxVideos) {
+      boxVideos.innerHTML = vids.map(function (u) {
+        return '<video class="casa-video" controls preload="metadata" playsinline src="' + escapar(u) + '"></video>';
+      }).join("");
+      boxVideos.hidden = !vids.length;
+    }
+
     var mini = $("#casaModalMiniaturas");
     mini.innerHTML = fotos.length > 1
       ? fotos.map(function (f, i) {
@@ -258,6 +268,12 @@
     casaAberta = null;
     var img = $("#casaModalImagem");
     if (img) img.removeAttribute("src");
+    var bv = $("#casaModalVideos");
+    if (bv) {
+      var vs = bv.querySelectorAll("video");
+      for (var i = 0; i < vs.length; i++) { try { vs[i].pause(); } catch (_) {} }
+      bv.innerHTML = "";
+    }
   }
 
   /* ---------------- ligações ---------------- */
