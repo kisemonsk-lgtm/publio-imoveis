@@ -1071,6 +1071,15 @@ async function iniciar() {
     alert("Este navegador não permitiu o armazenamento local: " + e.message);
     return;
   }
+
+  // Limpeza única: apaga o acervo antigo (Firebase/Catbox) guardado neste aparelho.
+  if (localStorage.getItem("limpeza-acervo-antigo") !== "1") {
+    try {
+      await dbSubstituirTudo([]);
+      imoveis = [];
+      localStorage.setItem("limpeza-acervo-antigo", "1");
+    } catch (_) { /* se falhar, tenta na próxima abertura */ }
+  }
   await carregarLista();
 
   $("#form").addEventListener("submit", salvarForm);
