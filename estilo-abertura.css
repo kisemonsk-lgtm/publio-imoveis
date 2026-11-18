@@ -71,11 +71,12 @@ body.abertura-ativa { overflow: hidden; }
   animation: abrirPo linear infinite;
 }
 
-/* ---------------- a porta fechada: só o botão Entrar ---------------- */
-/* Nada de porta se abrindo sozinha. A tela abre com a logo e o botão.
-   A porta aparece FECHADA só quando a pessoa clica em Entrar: duas folhas
-   escuras com filete dourado descem fechando a tela pela linha do meio e,
-   em seguida, se abrem para os lados, revelando o site. */
+/* ---------------- a porta (curtina) que se abre no meio ---------------- */
+/* Baseado no efeito "curtain opening" do CSS-Tricks: duas folhas de 50% da
+   tela, cada uma deslizando para o seu lado (translateX ±100%) com
+   transition de 1s ease-out, revelando o conteúdo atrás.
+   Aqui a porta fica FECHADA quando a pessoa clica em Entrar: as folhas
+   deslizam para os lados e o site aparece. */
 .abertura-porta {
   position: static;
   display: grid;
@@ -90,7 +91,7 @@ body.abertura-ativa { overflow: hidden; }
   top: 0;
   bottom: 0;
   left: 50%;
-  width: 50.5%;                  /* metade da tela cada folha: fecham exatamente no meio */
+  width: 50.5%;                  /* cada folha pega metade da tela */
   z-index: 3;
   pointer-events: none;
   visibility: hidden;            /* só aparecem no clique em Entrar */
@@ -101,9 +102,11 @@ body.abertura-ativa { overflow: hidden; }
     inset 0 0 0 1px rgba(212, 175, 55, .45),
     inset 0 0 70px rgba(0, 0, 0, .92),
     0 0 40px rgba(0, 0, 0, .55);
+  transition: transform 1s ease-out;   /* o deslizar da curtina */
+  will-change: transform;
 }
-.abertura-porta::before { transform-origin: left center;  border-right: 1px solid rgba(232, 199, 102, .85); }
-.abertura-porta::after  { transform-origin: right center; border-left: 1px solid rgba(232, 199, 102, .85); }
+.abertura-porta::before { border-right: 1px solid rgba(232, 199, 102, .85); }
+.abertura-porta::after  { border-left: 1px solid rgba(232, 199, 102, .85); }
 
 /* o conteúdo do outro lado da porta */
 .abertura-porta-painel {
@@ -118,35 +121,17 @@ body.abertura-ativa { overflow: hidden; }
   padding: 10px 0;
 }
 
-/* ---- 1) clique em Entrar: as folhas descem e fecham a tela no meio ---- */
+/* ---- clique em Entrar: a porta aparece fechada e desliza para os lados ---- */
 .abertura.abrindo .abertura-porta::before,
 .abertura.abrindo .abertura-porta::after { visibility: visible; }
-.abertura.abrindo .abertura-porta::before { animation: portaDesceEsq .42s cubic-bezier(.4, 0, .2, 1) both; }
-.abertura.abrindo .abertura-porta::after  { animation: portaDesceDir .42s cubic-bezier(.4, 0, .2, 1) both; }
-.abertura.abrindo .abertura-porta-painel { animation: painelSome .3s ease both; }
+.abertura.abrindo .abertura-porta::before { transform: translateX(0); }
+.abertura.abrindo .abertura-porta::after  { transform: translateX(0); }
+.abertura.abrindo .abertura-porta-painel { animation: painelSome .35s ease both; }
 
-/* ---- 2) a porta fechada se abre para os lados (o meio se abre) ---- */
-.abertura.aberta .abertura-porta::before,
-.abertura.aberta .abertura-porta::after { visibility: visible; }
-.abertura.aberta .abertura-porta::before { animation: portaAbreEsq .9s cubic-bezier(.7, 0, .3, 1) both; }
-.abertura.aberta .abertura-porta::after  { animation: portaAbreDir .9s cubic-bezier(.7, 0, .3, 1) both; }
+/* depois de um instante, as folhas saem da tela */
+.abertura.abrindo.curtina .abertura-porta::before { transform: translateX(-100%); }
+.abertura.abrindo.curtina .abertura-porta::after  { transform: translateX(100%); }
 
-@keyframes portaDesceEsq {
-  0%   { transform: translateY(-102%); opacity: 1; }
-  100% { transform: translateY(0);     opacity: 1; }
-}
-@keyframes portaDesceDir {
-  0%   { transform: translateY(-102%); opacity: 1; }
-  100% { transform: translateY(0);     opacity: 1; }
-}
-@keyframes portaAbreEsq {
-  0%   { transform: translateX(0)    scaleX(1); opacity: 1; }
-  100% { transform: translateX(-100%) scaleX(1); opacity: 0; }
-}
-@keyframes portaAbreDir {
-  0%   { transform: translateX(0)   scaleX(1); opacity: 1; }
-  100% { transform: translateX(100%) scaleX(1); opacity: 0; }
-}
 @keyframes painelSome {
   0%   { opacity: 1; }
   100% { opacity: 0; }
@@ -293,8 +278,6 @@ body.abertura-ativa { overflow: hidden; }
   .abertura-logo::after, .abertura-po i {
     animation: none !important;
   }
-  .abertura.abrindo .abertura-porta::before,
-  .abertura.abrindo .abertura-porta::after { animation-duration: .25s; }
-  .abertura.aberta .abertura-porta::before,
-  .abertura.aberta .abertura-porta::after { animation-duration: .55s; }
+  .abertura-porta::before,
+  .abertura-porta::after { transition-duration: .45s; }
 }

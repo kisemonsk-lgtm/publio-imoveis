@@ -12,7 +12,7 @@
 (function () {
   "use strict";
 
-  var CHAVE = "publio-abertura-v5";     // "1" = já entrou nesta sessão
+  var CHAVE = "publio-abertura-v6";     // "1" = já entrou nesta sessão
   var el = null;
   var indo = false;
 
@@ -56,7 +56,7 @@
     if (!el) return;
     semearPo();
     el.hidden = false;
-    el.classList.remove("abrindo", "aberta");
+    el.classList.remove("abrindo", "curtina");
     document.body.classList.add("abertura-ativa");
     window.scrollTo({ top: 0 });
 
@@ -82,7 +82,7 @@
     if (el) {
       el.hidden = true;
       el.style.display = "none";
-      el.classList.remove("abrindo", "aberta");
+      el.classList.remove("abrindo", "curtina");
     }
     el = null;
 
@@ -101,19 +101,16 @@
     marcarEntrou();
     document.body.classList.remove("abertura-ativa");
 
-    if (reduzido()) { sairDeCena(); return; }
-
-    // 1) as folhas descem e fecham a tela (0,42 s)
+    // 1) a porta aparece fechada, tampando a tela
     el.classList.add("abrindo");
 
-    // 2) a porta fechada se abre para os lados (0,9 s) e o site aparece
+    // 2) e desliza para os lados (translateX ±100%, 1s), revelando o site
     setTimeout(function () {
       if (!el) return;
-      el.classList.remove("abrindo");
-      el.classList.add("aberta");
-    }, 450);
+      el.classList.add("curtina");
+    }, reduzido() ? 30 : 90);
 
-    setTimeout(sairDeCena, 1400);
+    setTimeout(sairDeCena, reduzido() ? 550 : 1500);
   }
 
   /* se alguém abrir um link de ficha com a abertura na tela, sai da frente */
