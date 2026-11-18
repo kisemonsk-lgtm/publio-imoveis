@@ -1117,8 +1117,21 @@ async function rotear() {
   $("#painel").hidden = false;
 }
 
+/* O botão da Área do desenvolvedor precisa funcionar mesmo que o início ainda esteja carregando */
+function ligarBotaoDesenvolvedor() {
+  const b = document.getElementById("btnDesenvolvedor");
+  if (!b || b._ligado) return;
+  b._ligado = true;
+  b.addEventListener("click", () => {
+    try { abrirAdmin("desenvolvedor"); }
+    catch (e) { alert("Não consegui abrir a Área do desenvolvedor: " + e.message); }
+  });
+}
+
 /* ---------------- Início ---------------- */
 async function iniciar() {
+  ligarBotaoDesenvolvedor();
+
   try {
     db = await abrirDB();
   } catch (e) {
@@ -1967,10 +1980,7 @@ function ligarAdmin() {
   if (bSair) bSair.addEventListener("click", sairAdmin);
   const bIr = document.getElementById("btnIrPainel");
   if (bIr) bIr.addEventListener("click", () => mostrarTela("painel"));
-  const bDev = document.getElementById("btnDesenvolvedor");
-  if (bDev) bDev.addEventListener("click", () => {
-    abrirAdmin("desenvolvedor");
-  });
+  ligarBotaoDesenvolvedor();
   const bSenha = document.getElementById("btnSalvarSenha");
   if (bSenha) bSenha.addEventListener("click", salvarCredenciais);
   const bNovoU = document.getElementById("btnNovoUsuario");
