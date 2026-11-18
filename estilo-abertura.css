@@ -143,6 +143,37 @@ body.abertura-ativa { overflow: hidden; }
   100% { opacity: 1; transform: scale(1); filter: blur(0); }
 }
 
+
+/* ---------------- portas se fechando sobre o site (saindo -> fechando) ---------------- */
+/* ao entrar, o conteúdo já sai de cena antes das portas */
+.abertura.saindo .abertura-conteudo { animation: painelSai .45s ease both; }
+.abertura.saindo .abertura-porta::before { animation: portaFechaEsq .75s cubic-bezier(.7, 0, .3, 1) both; }
+.abertura.saindo .abertura-porta::after  { animation: portaFechaDir .75s cubic-bezier(.7, 0, .3, 1) both; }
+
+/* ao clicar em Abrir de novo, as portas abrem uma vez mais */
+.abertura.fechando .abertura-porta::before { animation: portaEsq .95s cubic-bezier(.7, 0, .3, 1) both; }
+.abertura.fechando .abertura-porta::after  { animation: portaDir .95s cubic-bezier(.7, 0, .3, 1) both; }
+.abertura.fechando .abertura-conteudo { animation: painelSurge .8s cubic-bezier(.22, .61, .36, 1) both .25s; }
+.abertura.fechando .abertura-linha { opacity: 1; animation: none; }
+
+/* conteúdo escondido atrás das portas fechadas */
+.abertura-porta-painel.painel-fechado { opacity: 0; pointer-events: none; }
+
+@keyframes portaFechaEsq {
+  0%   { transform: perspective(1200px) rotateY(-104deg); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
+}
+@keyframes portaFechaDir {
+  0%   { transform: perspective(1200px) rotateY(104deg); opacity: 0; }
+  20%  { opacity: 1; }
+  100% { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
+}
+@keyframes painelSai {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.92); }
+}
+
 /* ---------------- conteúdo ---------------- */
 .abertura-conteudo {
   position: relative;
@@ -329,15 +360,14 @@ body.abertura-ativa { overflow: hidden; }
   100% { opacity: 0; transform: translateY(-72vh) scale(1); }
 }
 
-/* quem prefere menos movimento vê tudo parado */
+/* Quem prefere menos movimento: a porta continua abrindo, só que sem
+   os efeitos extras (brilho, flutuação, respiração, pulso). */
 @media (prefers-reduced-motion: reduce) {
-  .abertura, .abertura::before, .abertura-linha, .abertura-porta, .abertura-porta::before,
-  .abertura-porta::after, .abertura-porta-painel, .abertura-logo,
-  .abertura-logo img, .abertura-logo::before, .abertura-logo::after,
+  .abertura::before, .abertura-linha, .abertura-logo img,
+  .abertura-logo::before, .abertura-logo::after,
   .abertura-nome, .abertura-sub, .abertura-frase,
   .abertura .btn-entrar, .abertura .btn-entrar::after, .abertura-pe, .abertura-po i {
     animation: none !important;
   }
   .abertura-nome { background-position: 0 0; }
-  .abertura-porta::before, .abertura-porta::after { display: none; }
 }
