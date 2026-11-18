@@ -1480,7 +1480,7 @@ async function abrirAdmin() {
 /* Cada cargo vê uma Área do corretor diferente */
 function aplicarTelaPorCargo() {
   const cargo = (acesso && acesso.cargo) || "adm";
-  const ehAdm = cargo === "adm";
+  const ehAdm = cargo === "adm" || cargo === "desenvolvedor";   // dev manda em tudo igual ao ADM
   const podeUsuarios = podeGerenciarUsuarios();
 
   const quem = document.getElementById("quemEntrou");
@@ -1497,7 +1497,15 @@ function aplicarTelaPorCargo() {
 
   // títulos mudam conforme o cargo
   const tAp = document.querySelector("#adminPainel .cartao .cartao-cabecalho h2");
-  if (tAp) tAp.textContent = ehAdm ? "Aparelhos autorizados (modo ADM)" : "Aparelhos autorizados";
+  const rotulo = cargo === "desenvolvedor" ? "modo Desenvolvedor" : "modo ADM";
+  if (tAp) tAp.textContent = ehAdm ? `Aparelhos autorizados (${rotulo})` : "Aparelhos autorizados";
+  const tituloCartaoAdm = document.getElementById("tituloCartaoAdm");
+  if (tituloCartaoAdm) tituloCartaoAdm.textContent = cargo === "desenvolvedor" ? "Modo Desenvolvedor" : "Modo ADM";
+  const textoCartaoAdm = document.getElementById("textoCartaoAdm");
+  if (textoCartaoAdm && cargo === "desenvolvedor") {
+    textoCartaoAdm.innerHTML = "Você tem acesso total: pode apagar imóveis de <b>todos os aparelhos</b>, criar usuários " +
+      "e mudar o cargo de qualquer aparelho — igual ao ADM. Use com cuidado: a exclusão não volta.";
+  }
   const cartaoUsuarios = document.getElementById("cartaoUsuarios");
   if (cartaoUsuarios) cartaoUsuarios.hidden = !podeUsuarios;
 
@@ -1724,7 +1732,7 @@ function gravarUsuarios() {
 
 const CARGOS_USUARIO = {
   adm:          { nome: "ADM",          criaUsuarios: true,  tudo: true },
-  desenvolvedor: { nome: "Desenvolvedor", criaUsuarios: true,  tudo: false },
+  desenvolvedor: { nome: "Desenvolvedor", criaUsuarios: true,  tudo: true },
   funcionario:  { nome: "Funcionário",  criaUsuarios: false, tudo: false }
 };
 
