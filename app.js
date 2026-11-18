@@ -146,31 +146,47 @@ function baseFS() {
 
 async function nuvemLer() {
   if (!NUVEM.ativa) return null;
-  const r = await fetch(`${baseFS()}?pageSize=300&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { cache: "no-store" });
-  if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
+  const r = await nuvemFetch(`${baseFS()}?pageSize=300&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { cache: "no-store" });
   const dados = await r.json();
   const docs = dados.documents || [];
   return docs.map((d) => docParaImovel(d.name.split("/").pop(), d.fields));
 }
 
+async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
+  let ultimo;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const r = await fetch(url, opcoes);
+      if (r.ok) return r;
+      ultimo = new Error("servidor respondeu " + r.status);
+      // 4xx: não adianta repetir
+      if (r.status >= 400 && r.status < 500) break;
+    } catch (e) {
+      ultimo = new Error("falha de rede (" + (e.message || "conexão recusada") + ")");
+    }
+    await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
+  }
+  throw ultimo || new Error("falha desconhecida");
+}
+
 async function nuvemSalvarUm(im) {
   if (!NUVEM.ativa) return false;
-  const url = `${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
-  const r = await fetch(url, {
+  const params = new URLSearchParams();
+  if (NUVEM.firebase.apiKey) params.set("key", NUVEM.firebase.apiKey);
+  const url = `${baseFS()}/${encodeURIComponent(im.id)}${params.toString() ? "?" + params.toString() : ""}`;
+  await nuvemFetch(url, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(imovelParaDoc(im))
   });
-  if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
   return true;
 }
 
 async function nuvemApagarUm(id) {
   if (!NUVEM.ativa) return false;
-  const r = await fetch(`${baseFS()}/${encodeURIComponent(id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, {
-    method: "DELETE"
-  });
-  if (!r.ok && r.status !== 404) throw new Error(`nuvem respondeu ${r.status}`);
+  try {
+    await nuvemFetch(`${baseFS()}/${encodeURIComponent(id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { method: "DELETE" });
+  } catch (_) { /* já não existia */ }
   return true;
 }
 
