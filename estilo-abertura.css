@@ -73,50 +73,53 @@ body.abertura-ativa { overflow: hidden; }
   animation: abrirPo linear infinite;
 }
 
-/* ---------------- o "abrir no meio": duas portas douradas ---------------- */
+/* ---------------- o "abrir no meio": duas portas pela linha central ---------------- */
+/* as folhas ficam presas na linha do meio da tela (não no bloco do conteúdo) */
 .abertura-porta {
-  position: relative;
-  width: 100%;
+  position: static;
   display: grid;
   place-items: center;
+  width: 100%;
   padding: 0;
-  animation: portaAbre 1s cubic-bezier(.22, .61, .36, 1) both .15s;
+  animation: portaAbre .5s ease both;
 }
 .abertura-porta::before,
 .abertura-porta::after {
   content: "";
   position: absolute;
-  top: -34px;
-  bottom: -34px;
-  width: calc(50% + 2px);
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 50.5%;          /* metade da tela cada uma: encontram exatamente no meio */
   z-index: 3;
   pointer-events: none;
-  border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(255, 246, 221, .10), transparent 30%, transparent 70%, rgba(0, 0, 0, .45)),
-    linear-gradient(155deg, #2a2416 0%, #14120c 42%, #0a0907 100%);
+    linear-gradient(180deg, rgba(255, 246, 221, .09), transparent 26%, transparent 74%, rgba(0, 0, 0, .5)),
+    linear-gradient(155deg, #2b2517 0%, #15130d 45%, #080706 100%);
   box-shadow:
-    inset 0 0 0 1px rgba(212, 175, 55, .45),
-    inset 0 0 46px rgba(0, 0, 0, .85),
-    0 0 40px rgba(0, 0, 0, .55);
-  animation-duration: 1.5s;
-  animation-timing-function: cubic-bezier(.7, 0, .3, 1);
+    inset 0 0 0 1px rgba(212, 175, 55, .42),
+    inset 0 0 60px rgba(0, 0, 0, .9),
+    0 0 46px rgba(0, 0, 0, .6);
+  animation-duration: 1.8s;
+  animation-timing-function: cubic-bezier(.76, 0, .24, 1);
   animation-fill-mode: both;
-  animation-delay: .1s;
+  animation-delay: .2s;
 }
+/* folha da esquerda: metade esquerda da tela, dobradiça na linha do meio */
 .abertura-porta::before {
-  right: 50%;
-  transform-origin: right center;
-  border-right: 1px solid rgba(232, 199, 102, .75);
+  transform-origin: left center;
+  border-right: 1px solid rgba(232, 199, 102, .8);
   animation-name: portaEsq;
 }
+/* folha da direita: metade direita da tela, dobradiça na linha do meio */
 .abertura-porta::after {
-  left: 50%;
+  transform: translateX(0);
   transform-origin: left center;
-  border-left: 1px solid rgba(232, 199, 102, .75);
+  border-left: 1px solid rgba(232, 199, 102, .8);
   animation-name: portaDir;
 }
-/* fio de luz que sai do meio quando as portas se abrem */
+
+/* o conteúdo (logo, nome, botão) surge por trás das portas */
 .abertura-porta-painel {
   position: relative;
   z-index: 1;
@@ -127,20 +130,20 @@ body.abertura-ativa { overflow: hidden; }
   gap: 18px;
   width: 100%;
   padding: 10px 0;
-  animation: painelSurge .9s cubic-bezier(.22, .61, .36, 1) both .55s;
+  animation: painelSurge .9s cubic-bezier(.22, .61, .36, 1) both .7s;
 }
 
 @keyframes portaEsq {
-  0%   { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
-  100% { transform: perspective(1200px) rotateY(-104deg); opacity: 0; }
+  0%   { transform: perspective(1600px) rotateY(0deg); }
+  100% { transform: perspective(1600px) rotateY(-96deg); }
 }
 @keyframes portaDir {
-  0%   { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
-  100% { transform: perspective(1200px) rotateY(104deg); opacity: 0; }
+  0%   { transform: translateX(0) perspective(1600px) rotateY(0deg); }
+  100% { transform: translateX(-100%) perspective(1600px) rotateY(-96deg); }
 }
-@keyframes portaAbre { from { opacity: 0; } to { opacity: 1; } }
+@keyframes portaAbre { from { opacity: 1; } to { opacity: 1; } }
 @keyframes painelSurge {
-  0%   { opacity: 0; transform: scale(.86); filter: blur(6px); }
+  0%   { opacity: 0; transform: scale(.88); filter: blur(6px); }
   100% { opacity: 1; transform: scale(1); filter: blur(0); }
 }
 
