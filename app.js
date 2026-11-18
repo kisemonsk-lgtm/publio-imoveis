@@ -15,8 +15,8 @@ const STORE_META = "meta";
    SUPABASE: preencha "url" e "chave" (Project URL e anon/publishable key).
    Enquanto estiverem vazios, o app funciona só neste aparelho (modo local).   */
 const SUPABASE = {
-  url: "",                       // ex.: https://abcdefgh.supabase.co
-  chave: "",                     // ex.: sb_publishable_... (ou a anon key)
+  url: "https://mefhqkjrszvrjztqdlqe.supabase.co",   // Project URL do projeto publio-imoveis
+  chave: "sb_publishable_Y_WmSLQXSke0v2O9P8swgw_9uS5tt_P",   // publishable key (pode ficar no site)
   tabela: "imoveis",
   bucket: "fotos",               // bucket público das fotos
   get ativa() { return !!(this.url && this.chave); }
