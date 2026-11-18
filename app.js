@@ -24,10 +24,8 @@ const NUVEM = {
     appId: "1:917200805284:web:4f947250da877bb8f8f531"
   },
   colecao: "publio",
-  storageBucket: "publio-imoveis-v1.firebasestorage.app",   // onde vão as fotos (sem o limite de 1 MB)
   get ativa() { return !!(this.firebase && this.firebase.projectId && this.firebase.apiKey); },
-  storageLigado: false,   // vira true quando o Storage for criado no Firebase (ver COMO-AUMENTAR-O-LIMITE.md)
-  get storageAtivo() { return !!(this.storageLigado && this.storageBucket && this.firebase.apiKey); }
+  fotosFora: true   // fotos vão para um servidor gratuito; o banco guarda só os endereços
 };
 const FS_URL = "https://firestore.googleapis.com/v1/projects/";
 
@@ -178,9 +176,10 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   throw ultimo || new Error("falha desconhecida");
 }
 
-/* ---------- Firebase Storage: fotos sem o limite de 1 MB do banco ---------- */
-const STORAGE_URL = "https://firebasestorage.googleapis.com/v0/b/";
-const STORAGE_PASTA = "fotos";
+/* ---------- Fotos fora do banco (Catbox, grátis e sem conta) ----------
+   O Firestore só aceita 1 MB por imóvel. Aqui as fotos vão para um
+   servidor de arquivos gratuito e o banco guarda apenas o endereço delas. */
+const FOTOS_URL = "https://catbox.moe/user/api.php";
 
 function dataUrlParaBlob(dataUrl) {
   const [cabeca, b64] = String(dataUrl).split(",");
@@ -192,36 +191,25 @@ function dataUrlParaBlob(dataUrl) {
 }
 
 /* Envia a foto e devolve o endereço público dela */
-async function storageEnviarFoto(dataUrl, idImovel, indice) {
-  const nome = `${STORAGE_PASTA}/${idImovel}/${Date.now()}-${indice}.jpg`;
+async function enviarFotoParaServidor(dataUrl) {
   const blob = dataUrlParaBlob(dataUrl);
-  const url = `${STORAGE_URL}${NUVEM.storageBucket}/o?uploadType=media&name=${encodeURIComponent(nome)}&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
-  if (!r.ok) throw new Error("envio da foto falhou (" + r.status + ")");
-  const dados = await r.json();
-  const caminho = dados.name || nome;
-  return `${STORAGE_URL}${NUVEM.storageBucket}/o/${encodeURIComponent(caminho)}?alt=media&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
+  const form = new FormData();
+  form.append("reqtype", "fileupload");
+  form.append("fileToUpload", blob, "foto.jpg");
+  const r = await fetch(FOTOS_URL, { method: "POST", body: form });
+  const texto = (await r.text()).trim();
+  if (!r.ok || !/^https?:\/\//.test(texto)) throw new Error("o envio da foto falhou (" + (r.status || "sem resposta") + ")");
+  return texto;
 }
 
-async function storageApagarFoto(urlFoto) {
-  try {
-    const caminho = decodeURIComponent(String(urlFoto).split("/o/")[1].split("?")[0]);
-    await fetch(`${STORAGE_URL}${NUVEM.storageBucket}/o/${encodeURIComponent(caminho)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { method: "DELETE" });
-  } catch (_) {}
-}
-
-/* Troca as fotos em base64 por endereços no Storage (se ainda não foram enviadas) */
-async function enviarFotosParaStorage(im) {
-  if (!NUVEM.storageAtivo) return im;
+/* Troca as fotos guardadas no aparelho por endereços na internet */
+async function enviarFotosParaServidor(im) {
+  if (!NUVEM.fotosFora) return im;
   const fotos = imagensDe(im);
   const novas = [];
-  for (let i = 0; i < fotos.length; i++) {
-    const foto = fotos[i];
+  for (const foto of fotos) {
     if (/^https?:/.test(foto)) { novas.push(foto); continue; }
-    if (typeof foto === "string" && foto.length > LIMITE_FOTO_STORAGE) {
-      throw new Error("uma das fotos é grande demais. Escolha outra foto.");
-    }
-    novas.push(await storageEnviarFoto(foto, im.id, i));
+    novas.push(await enviarFotoParaServidor(foto));
   }
   return Object.assign({}, im, { imagem: novas[0] || "", imagens: novas });
 }
@@ -313,7 +301,7 @@ async function publicar(listaParaEnviar) {
   let listaFinal = lista;
   try {
     listaFinal = [];
-    for (const im of lista) listaFinal.push(await enviarFotosParaStorage(im));
+    for (const im of lista) listaFinal.push(await enviarFotosParaServidor(im));
     await nuvemEnviarLista(listaFinal);
   } catch (e) {
     erroEnvio = e.message;
@@ -413,9 +401,9 @@ function fmtPreco(valor) {
   return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-/* Reduz a foto e guarda em JPEG pequeno, para caber no limite de 1 MB por imóvel do Firestore */
+/* Reduz a foto para um JPEG de boa qualidade (as fotos não ficam mais no banco) */
 function comprimirImagem(file, maxLado = 1600, qualidade = 0.85, alvoBytes = 700000) {
-  if (!NUVEM.storageLigado) { maxLado = 1200; qualidade = 0.78; alvoBytes = 100000; }
+  if (!NUVEM.fotosFora) { maxLado = 1200; qualidade = 0.78; alvoBytes = 100000; }
   return new Promise((resolve, reject) => {
     const leitor = new FileReader();
     leitor.onerror = () => reject(new Error("Não consegui ler o arquivo."));
@@ -467,9 +455,9 @@ function tamanhoImovel(im) {
   const texto = (im.titulo || "").length + (im.descricao || "").length + (im.local || "").length + 200;
   return bytesFotos + texto;
 }
-const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (fotos grandes vão para o Storage)
-const MAX_FOTOS = NUVEM.storageLigado ? 40 : 10;   // 10 sem o Storage, 40 com ele
-const LIMITE_FOTO_STORAGE = 1500000;  // 1,5 MB por foto já comprimida
+const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (as fotos ficam fora dele)
+const MAX_FOTOS = NUVEM.fotosFora ? 30 : 10;   // 30 fotos com as fotos fora do banco
+const LIMITE_FOTO = 5000000;     // 5 MB por foto (limite do servidor de fotos)
 
 async function copiarTexto(texto) {
   try {
