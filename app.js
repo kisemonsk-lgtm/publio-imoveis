@@ -24,7 +24,10 @@ const NUVEM = {
     appId: "1:917200805284:web:4f947250da877bb8f8f531"
   },
   colecao: "publio",
-  get ativa() { return !!(this.firebase && this.firebase.projectId && this.firebase.apiKey); }
+  storageBucket: "publio-imoveis-v1.firebasestorage.app",   // onde vão as fotos (sem o limite de 1 MB)
+  get ativa() { return !!(this.firebase && this.firebase.projectId && this.firebase.apiKey); },
+  storageLigado: false,   // vira true quando o Storage for criado no Firebase (ver COMO-AUMENTAR-O-LIMITE.md)
+  get storageAtivo() { return !!(this.storageLigado && this.storageBucket && this.firebase.apiKey); }
 };
 const FS_URL = "https://firestore.googleapis.com/v1/projects/";
 
@@ -175,6 +178,54 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   throw ultimo || new Error("falha desconhecida");
 }
 
+/* ---------- Firebase Storage: fotos sem o limite de 1 MB do banco ---------- */
+const STORAGE_URL = "https://firebasestorage.googleapis.com/v0/b/";
+const STORAGE_PASTA = "fotos";
+
+function dataUrlParaBlob(dataUrl) {
+  const [cabeca, b64] = String(dataUrl).split(",");
+  const tipo = (cabeca.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type: tipo });
+}
+
+/* Envia a foto e devolve o endereço público dela */
+async function storageEnviarFoto(dataUrl, idImovel, indice) {
+  const nome = `${STORAGE_PASTA}/${idImovel}/${Date.now()}-${indice}.jpg`;
+  const blob = dataUrlParaBlob(dataUrl);
+  const url = `${STORAGE_URL}${NUVEM.storageBucket}/o?uploadType=media&name=${encodeURIComponent(nome)}&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "image/jpeg" }, body: blob });
+  if (!r.ok) throw new Error("envio da foto falhou (" + r.status + ")");
+  const dados = await r.json();
+  const caminho = dados.name || nome;
+  return `${STORAGE_URL}${NUVEM.storageBucket}/o/${encodeURIComponent(caminho)}?alt=media&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
+}
+
+async function storageApagarFoto(urlFoto) {
+  try {
+    const caminho = decodeURIComponent(String(urlFoto).split("/o/")[1].split("?")[0]);
+    await fetch(`${STORAGE_URL}${NUVEM.storageBucket}/o/${encodeURIComponent(caminho)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { method: "DELETE" });
+  } catch (_) {}
+}
+
+/* Troca as fotos em base64 por endereços no Storage (se ainda não foram enviadas) */
+async function enviarFotosParaStorage(im) {
+  if (!NUVEM.storageAtivo) return im;
+  const fotos = imagensDe(im);
+  const novas = [];
+  for (let i = 0; i < fotos.length; i++) {
+    const foto = fotos[i];
+    if (/^https?:/.test(foto)) { novas.push(foto); continue; }
+    if (typeof foto === "string" && foto.length > LIMITE_FOTO_STORAGE) {
+      throw new Error("uma das fotos é grande demais. Escolha outra foto.");
+    }
+    novas.push(await storageEnviarFoto(foto, im.id, i));
+  }
+  return Object.assign({}, im, { imagem: novas[0] || "", imagens: novas });
+}
+
 async function nuvemSalvarUm(im) {
   if (!NUVEM.ativa) return false;
   const url = `${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
@@ -258,9 +309,12 @@ async function publicar(listaParaEnviar) {
   const lista = listaParaEnviar || imoveis;
   let erroEnvio = "";
 
-  // 1) envia o que mudou
+  // 1) manda as fotos para o Storage (sem limite de 1 MB) e depois grava no banco
+  let listaFinal = lista;
   try {
-    await nuvemEnviarLista(lista);
+    listaFinal = [];
+    for (const im of lista) listaFinal.push(await enviarFotosParaStorage(im));
+    await nuvemEnviarLista(listaFinal);
   } catch (e) {
     erroEnvio = e.message;
   }
@@ -270,11 +324,18 @@ async function publicar(listaParaEnviar) {
     try {
       const confirmados = (await nuvemLer()) || [];
       const ids = new Set(confirmados.map((x) => x.id));
-      const faltando = (lista || []).filter((x) => !ids.has(x.id));
+      const faltando = (listaFinal || []).filter((x) => !ids.has(x.id));
       if (!faltando.length) {
+        // guarda localmente as fotos já como endereços (não pesa mais no aparelho)
+        for (const im of listaFinal) {
+          const igual = imoveis.find((x) => x.id === im.id);
+          if (igual) { igual.imagens = im.imagens.slice(); igual.imagem = im.imagem; }
+        }
+        await dbSubstituirTudo(imoveis);
         nuvemOk = true;
         ultimoErroNuvem = "";
         atualizarStatusNuvem();
+        renderLista();
         return { nuvem: true };
       }
       // ainda não apareceu: tenta reenviar só o que falta (uma vez)
@@ -353,7 +414,8 @@ function fmtPreco(valor) {
 }
 
 /* Reduz a foto e guarda em JPEG pequeno, para caber no limite de 1 MB por imóvel do Firestore */
-function comprimirImagem(file, maxLado = 1200, qualidade = 0.78, alvoBytes = 100000) {
+function comprimirImagem(file, maxLado = 1600, qualidade = 0.85, alvoBytes = 700000) {
+  if (!NUVEM.storageLigado) { maxLado = 1200; qualidade = 0.78; alvoBytes = 100000; }
   return new Promise((resolve, reject) => {
     const leitor = new FileReader();
     leitor.onerror = () => reject(new Error("Não consegui ler o arquivo."));
@@ -405,8 +467,9 @@ function tamanhoImovel(im) {
   const texto = (im.titulo || "").length + (im.descricao || "").length + (im.local || "").length + 200;
   return bytesFotos + texto;
 }
-const LIMITE_IMOVEL = 1048000;   // margem de segurança sobre o limite de 1 MB do Firestore
-const MAX_FOTOS = 10;            // fotos por imóvel (cabe no limite de 1 MB)
+const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (fotos grandes vão para o Storage)
+const MAX_FOTOS = NUVEM.storageLigado ? 40 : 10;   // 10 sem o Storage, 40 com ele
+const LIMITE_FOTO_STORAGE = 1500000;  // 1,5 MB por foto já comprimida
 
 async function copiarTexto(texto) {
   try {
@@ -526,10 +589,8 @@ function renderMiniaturas() {
     </div>`).join("");
   const cont = document.getElementById("fotosInfo");
   if (cont) {
-    const bytes = imagemAtual.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
-    const mb = (bytes / 1048576).toFixed(2).replace(".", ",");
     cont.textContent = imagemAtual.length
-      ? `${imagemAtual.length} foto${imagemAtual.length > 1 ? "s" : ""} (${mb} MB) — a primeira é a capa`
+      ? `${imagemAtual.length} de ${MAX_FOTOS} fotos — a primeira é a capa`
       : "Nenhuma foto escolhida";
   }
 }
@@ -583,9 +644,8 @@ async function salvarForm(ev) {
   const idx = imoveis.findIndex((x) => x.id === im.id);
   if (idx >= 0) imoveis[idx] = im; else imoveis.push(im);
 
-  if (tamanhoImovel(im) > LIMITE_IMOVEL) {
-    const mb = (tamanhoImovel(im) / 1048576).toFixed(2).replace(".", ",");
-    aviso($("#avisoForm"), `Fotos demais para um imóvel (${mb} MB). Remova algumas fotos e tente de novo.`, true);
+  if (imagemAtual.length > MAX_FOTOS) {
+    aviso($("#avisoForm"), `Máximo de ${MAX_FOTOS} fotos por imóvel.`, true);
     return;
   }
 
@@ -1006,12 +1066,7 @@ async function iniciar() {
     } else if (imagemAtual.length >= MAX_FOTOS) {
       aviso($("#avisoForm"), `Limite de ${MAX_FOTOS} fotos por imóvel atingido.`);
     } else {
-      const totalBytes = imagemAtual.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
-      if (totalBytes > LIMITE_IMOVEL) {
-        aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s), mas o total passou do limite do banco. Remova alguma foto.`, true);
-      } else {
-        aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s). Total: ${imagemAtual.length}.`);
-      }
+      aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s). Total: ${imagemAtual.length} de ${MAX_FOTOS}.`);
     }
   });
 
