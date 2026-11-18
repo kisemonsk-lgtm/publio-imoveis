@@ -242,11 +242,12 @@ async function nuvemApagarUm(id) {
 
 /* Envia vários imóveis de uma vez */
 async function nuvemEnviarLista(lista) {
-  let ok = true;
+  const falhas = [];
   for (const im of lista || []) {
-    try { await nuvemSalvarUm(im); } catch (_) { ok = false; }
+    try { await nuvemSalvarUm(im); } catch (e) { falhas.push((im.titulo || im.id) + ": " + e.message); }
   }
-  return ok;
+  if (falhas.length) throw new Error(falhas[0]);
+  return true;
 }
 
 /* Junta duas listas pelo id, ficando com a versão mais recente de cada imóvel */
@@ -295,26 +296,26 @@ async function publicar(listaParaEnviar) {
   if (!NUVEM.ativa) return { nuvem: false };
 
   const lista = listaParaEnviar || imoveis;
+  let listaFinal = [];
   let erroEnvio = "";
 
-  // 1) manda as fotos para o Storage (sem limite de 1 MB) e depois grava no banco
-  let listaFinal = lista;
+  // 1) manda as fotos para o servidor de fotos e grava o imóvel no banco
   try {
-    listaFinal = [];
     for (const im of lista) listaFinal.push(await enviarFotosParaServidor(im));
     await nuvemEnviarLista(listaFinal);
   } catch (e) {
     erroEnvio = e.message;
+    if (!listaFinal.length) listaFinal = lista;
   }
 
-  // 2) confirma no banco se cada imóvel ficou gravado (o Firestore pode demorar a mostrar)
+  // 2) confirma no banco, dando tempo para ele mostrar o que acabou de receber
   for (let tentativa = 0; tentativa < 4; tentativa++) {
     try {
       const confirmados = (await nuvemLer()) || [];
       const ids = new Set(confirmados.map((x) => x.id));
-      const faltando = (listaFinal || []).filter((x) => !ids.has(x.id));
+      const faltando = listaFinal.filter((x) => !ids.has(x.id));
       if (!faltando.length) {
-        // guarda localmente as fotos já como endereços (não pesa mais no aparelho)
+        // a cópia local passa a guardar os endereços das fotos (bem mais leve)
         for (const im of listaFinal) {
           const igual = imoveis.find((x) => x.id === im.id);
           if (igual) { igual.imagens = im.imagens.slice(); igual.imagem = im.imagem; }
@@ -326,13 +327,11 @@ async function publicar(listaParaEnviar) {
         renderLista();
         return { nuvem: true };
       }
-      // ainda não apareceu: tenta reenviar só o que falta (uma vez)
-      if (tentativa === 1) { try { await nuvemEnviarLista(faltando); } catch (e) { erroEnvio = e.message; } }
       erroEnvio = erroEnvio || "o banco ainda não confirmou o envio";
     } catch (e) {
       erroEnvio = e.message;
     }
-    await new Promise((ok) => setTimeout(ok, 700 * (tentativa + 1)));
+    await new Promise((ok) => setTimeout(ok, 900 * (tentativa + 1)));
   }
 
   nuvemOk = false;
@@ -746,8 +745,20 @@ function pintarFoto(src, direcao) {
     if (alvo.decode) alvo.decode().then(aplicar).catch(aplicar); else aplicar();
   };
   pre.onerror = () => {
-    alvo.src = src;
-    aplicar();
+    // foto com problema: pula para a próxima que abrir (evita ficha em branco)
+    const box = $("#ficha");
+    const total = (box._fotos || []).length;
+    const atual = box._fotoAtiva || 0;
+    if (total > 1) {
+      for (let passo = 1; passo < total; passo++) {
+        const prox = (atual + passo) % total;
+        const teste = new Image();
+        teste.onload = () => { box._fotoAtiva = prox; pintarFoto((box._fotos || [])[prox], direcao); };
+        teste.src = (box._fotos || [])[prox];
+      }
+    }
+    alvo.alt = "Foto não carregou";
+    alvo.classList.add("visivel");
   };
   pre.src = src;
 }
@@ -806,10 +817,16 @@ function montarGaleria(im) {
   }
   const mini = $("#miniaturasFicha");
   if (mini) {
-    mini.innerHTML = fotos.length > 1
-      ? fotos.map((src, i) => "<button type=\"button\" class=\"thumb" + (i === 0 ? " ativa" : "") + "\" data-foto=\"" + i + "\"><img src=\"" + src + "\" alt=\"Foto " + (i + 1) + "\" /></button>").join("")
-      : "";
-    mini.hidden = fotos.length <= 1;
+    if (fotos.length > 1) {
+      mini.innerHTML = fotos.map((src, i) =>
+        "<button type=\"button\" class=\"thumb" + (i === 0 ? " ativa" : "") + "\" data-foto=\"" + i + "\">" +
+        "<img src=\"" + src + "\" alt=\"Foto " + (i + 1) + "\" loading=\"lazy\" " +
+        "onerror=\"this.style.opacity=0.25;this.parentNode.title='Foto não carregou'\" /></button>").join("");
+      mini.hidden = false;
+    } else {
+      mini.innerHTML = "";
+      mini.hidden = true;
+    }
   }
   const setaEsq = $("#setaEsq"), setaDir = $("#setaDir");
   if (setaEsq && setaDir) {
