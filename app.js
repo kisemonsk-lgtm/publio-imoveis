@@ -1472,8 +1472,50 @@ async function abrirAdmin() {
     if (u) { u.value = usuarios.length === 1 ? usuarios[0].usuario : ""; setTimeout(() => document.getElementById("loginSenha").focus(), 60); }
     aviso(document.getElementById("loginAviso"), "");
   } else {
+    aplicarTelaPorCargo();
     await carregarPainelAdmin();
   }
+}
+
+/* Cada cargo vê uma Área do corretor diferente */
+function aplicarTelaPorCargo() {
+  const cargo = (acesso && acesso.cargo) || "adm";
+  const ehAdm = cargo === "adm";
+  const podeUsuarios = podeGerenciarUsuarios();
+
+  const quem = document.getElementById("quemEntrou");
+  if (quem) quem.textContent = acesso ? acesso.usuario : "—";
+  const selo = document.getElementById("seloMeuCargo");
+  if (selo) {
+    selo.textContent = nomeDoCargoUsuario(cargo);
+    selo.className = "selo-cargo " + (ehAdm ? "adm" : cargo === "desenvolvedor" ? "dev" : "func");
+  }
+
+  // cartões que só o ADM vê
+  const cartoesAdm = document.getElementById("cartoesAdm");
+  if (cartoesAdm) cartoesAdm.hidden = !ehAdm;
+
+  // títulos mudam conforme o cargo
+  const tAp = document.querySelector("#adminPainel .cartao .cartao-cabecalho h2");
+  if (tAp) tAp.textContent = ehAdm ? "Aparelhos autorizados (modo ADM)" : "Aparelhos autorizados";
+  const cartaoUsuarios = document.getElementById("cartaoUsuarios");
+  if (cartaoUsuarios) cartaoUsuarios.hidden = !podeUsuarios;
+
+  const bNovo = document.getElementById("btnNovoUsuario");
+  if (bNovo) bNovo.hidden = !podeUsuarios;
+
+  atualizarResumoAdm();
+}
+
+function atualizarResumoAdm() {
+  const r1 = document.getElementById("resumoImoveis");
+  if (r1) r1.textContent = String(imoveis.length);
+  const r2 = document.getElementById("resumoAparelhos");
+  if (r2) r2.textContent = String((dispositivosCache || []).length);
+  const r3 = document.getElementById("resumoPendentes");
+  if (r3) r3.textContent = String((dispositivosCache || []).filter((d) => !d.liberado).length);
+  const r4 = document.getElementById("resumoUsuarios");
+  if (r4) r4.textContent = String(usuarios.length);
 }
 
 async function tentarEntrar() {
@@ -1550,6 +1592,7 @@ async function carregarPainelAdmin() {
   renderUsuarios();
   const bNovo = document.getElementById("btnNovoUsuario");
   if (bNovo) bNovo.hidden = !podeGerenciarUsuarios();
+  atualizarResumoAdm();
 }
 
 function escapar(t) {
@@ -1779,8 +1822,9 @@ function renderUsuarios() {
       <td><span class="selo-cargo ${u.cargo === "adm" ? "adm" : u.cargo === "desenvolvedor" ? "dev" : "func"}">${nomeDoCargoUsuario(u.cargo)}</span></td>
       <td class="disp-data">${u.desde ? quandoFoi(u.desde) : "—"}</td>
       <td class="acoes-aparelho">
-        <button type="button" class="btn btn-neutro btn-mini" data-acao="trocar-senha">Trocar senha</button>
-        <button type="button" class="btn btn-perigo btn-mini" data-acao="remover-usuario">Remover</button>
+        ${podeGerenciarUsuarios() ? `
+          <button type="button" class="btn btn-neutro btn-mini" data-acao="trocar-senha">Trocar senha</button>
+          <button type="button" class="btn btn-perigo btn-mini" data-acao="remover-usuario">Remover</button>` : ""}
       </td>
     </tr>`).join("");
   const vazio = document.getElementById("usuariosVazio");
@@ -1826,6 +1870,8 @@ function ligarAdmin() {
   if (bVoltar) bVoltar.addEventListener("click", () => mostrarTela("painel"));
   const bSair = document.getElementById("btnSair");
   if (bSair) bSair.addEventListener("click", sairAdmin);
+  const bIr = document.getElementById("btnIrPainel");
+  if (bIr) bIr.addEventListener("click", () => mostrarTela("painel"));
   const bSenha = document.getElementById("btnSalvarSenha");
   if (bSenha) bSenha.addEventListener("click", salvarCredenciais);
   const bNovoU = document.getElementById("btnNovoUsuario");

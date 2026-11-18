@@ -684,3 +684,47 @@ input:focus, select:focus, textarea:focus {
 @keyframes surgir { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .form-usuario .rotulo-desc { margin-top: 0; }
 .selo-cargo.dev { background: rgba(140, 220, 160, .12); color: #9ee6b4; border: 1px solid #2f6440; }
+
+/* ---------- Área do corretor: barra do usuário e cartões do ADM ---------- */
+.barra-admin {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border: 1px solid var(--ouro-fosco);
+  border-radius: 12px;
+  background: linear-gradient(120deg, rgba(212, 175, 55, .12), rgba(212, 175, 55, .03));
+  font-size: .9rem;
+  color: var(--texto-suave);
+}
+.barra-admin b { color: var(--texto); }
+
+.grade-admin {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+@media (max-width: 720px) { .grade-admin { grid-template-columns: 1fr; } }
+
+.cartao-destaque {
+  border-color: var(--ouro-fosco);
+  background: linear-gradient(150deg, rgba(212, 175, 55, .14), var(--cartao) 65%);
+}
+.cartao-destaque h2 { color: var(--ouro-claro); }
+
+.resumo-adm { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.resumo-adm li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--linha);
+  font-size: .88rem;
+  color: var(--texto-suave);
+}
+.resumo-adm li:last-child { border-bottom: 0; }
+.resumo-adm b { color: var(--ouro-claro); font-size: 1.05rem; }

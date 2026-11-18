@@ -142,6 +142,32 @@
 
     <!-- dispositivos -->
     <div id="adminPainel" hidden>
+      <div class="barra-admin">
+        <span>Você entrou como <b id="quemEntrou">—</b></span>
+        <span class="selo-cargo" id="seloMeuCargo">—</span>
+      </div>
+
+      <!-- ===== cartões exclusivos do ADM ===== -->
+      <div id="cartoesAdm" class="grade-admin" hidden>
+        <div class="cartao cartao-destaque">
+          <h2>Modo ADM</h2>
+          <p class="admin-sub">Você manda em tudo: pode apagar imóveis de <b>todos os aparelhos</b>, criar usuários e
+            mudar o cargo de qualquer aparelho. Use com cuidado — a exclusão não volta.</p>
+          <div class="acoes-form">
+            <button type="button" class="btn btn-primario" id="btnIrPainel">Ir para os imóveis</button>
+          </div>
+        </div>
+        <div class="cartao">
+          <h2>Resumo da conta</h2>
+          <ul class="resumo-adm">
+            <li><span>Imóveis cadastrados</span><b id="resumoImoveis">0</b></li>
+            <li><span>Aparelhos registrados</span><b id="resumoAparelhos">0</b></li>
+            <li><span>Aparelhos aguardando liberação</span><b id="resumoPendentes">0</b></li>
+            <li><span>Usuários da Área do corretor</span><b id="resumoUsuarios">0</b></li>
+          </ul>
+        </div>
+      </div>
+
       <div class="cartao">
         <div class="cartao-cabecalho">
           <h2>Aparelhos autorizados</h2>
@@ -182,7 +208,7 @@
         <p id="dispAviso" class="aviso" hidden></p>
       </div>
 
-      <div class="cartao">
+      <div class="cartao" id="cartaoUsuarios">
         <h2>Usuários da Área do corretor</h2>
         <p class="admin-sub">Quem estiver nesta lista consegue entrar com o próprio usuário e senha.
           Os cargos <b>ADM</b> e <b>Desenvolvedor</b> podem criar e remover usuários; o <b>Funcionário</b> não.
