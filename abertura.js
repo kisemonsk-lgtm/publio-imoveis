@@ -68,9 +68,13 @@
     document.addEventListener("keydown", teclado);
   }
 
+  /* Enter abre; Escape só sai da abertura se já tiver entrado antes nesta sessão */
   function teclado(ev) {
     if (!el || el.hidden) return;
-    if (ev.key === "Enter" || ev.key === "Escape") {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      entrar();
+    } else if (ev.key === "Escape" && jaEntrou()) {
       ev.preventDefault();
       entrar();
     }

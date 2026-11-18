@@ -78,3 +78,18 @@ você preencher — caso contrário vale o que foi lido da descrição.
 
 > Rode o trecho final do `SUPABASE.sql` uma vez no SQL Editor do Supabase: ele cria a
 > coluna `videos` e libera 50 MB no bucket.
+
+## Quem entra é cliente (e só vê as casas)
+
+Todo aparelho novo que abre o site entra **direto como Cliente**, sem pedir código e sem
+liberação de ninguém. Nesse modo o site mostra **só as casas**: o cadastro, o excluir, a
+Área do corretor e a Área do desenvolvedor ficam escondidos.
+
+Para mudar a função de um aparelho (Cliente → Funcionário → ADM) é preciso entrar em
+**⚙️ Área do desenvolvedor** (usuário e senha do dono) → cartão *Modo Desenvolvedor* →
+tabela de aparelhos → trocar o cargo na coluna da função. Só o dono vê esse botão e só
+ele muda função de aparelho.
+
+- **Cliente** — só vê as casas, não cadastra nem apaga
+- **Funcionário** — cadastra e publica imóveis
+- **ADM** — cadastra, publica e apaga imóveis de todos os aparelhos

@@ -152,3 +152,23 @@ update storage.buckets set file_size_limit = 52428800, allowed_mime_types = null
 select 'coluna videos criada' as resultado,
        (select count(*) from information_schema.columns
          where table_schema='public' and table_name='imoveis' and column_name='videos') as tem_coluna;
+
+
+-- ============================================================
+--  Todo aparelho novo entra como CLIENTE (só vê as casas)
+--  Rode este trecho uma vez: ele acerta os aparelhos que
+--  estavam "aguardando liberação" e deixa todo mundo liberado
+--  como cliente. Só o Modo Desenvolvedor muda a função para
+--  Funcionário ou ADM.
+-- ============================================================
+
+update public.config_dispositivos
+   set liberado = true,
+       publicar = coalesce(publicar, false),
+       apagar   = coalesce(apagar, false)
+ where liberado is distinct from true;
+
+-- quem já era ADM ou Funcionário continua como estava
+update public.config_dispositivos set liberado = true where liberado is null;
+
+select 'aparelhos como cliente' as resultado, count(*) from public.config_dispositivos where liberado;

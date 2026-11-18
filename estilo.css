@@ -53,6 +53,7 @@ h3 { font-size: .95rem; }
   z-index: 20;
 }
 .topo-inner {
+  position: relative;
   max-width: 1180px;
   margin: 0 auto;
   display: flex;
@@ -790,3 +791,48 @@ input:focus, select:focus, textarea:focus {
   white-space: nowrap;
   opacity: .85;
 }
+
+/* ==========================================================
+   MODO CLIENTE — aparelho que só vê as casas
+   Some tudo de administração: cadastro, excluir, Área do
+   corretor e Área do desenvolvedor. Fica só a vitrine.
+   ========================================================== */
+body.modo-cliente #form,
+body.modo-cliente #cartoesAdm,
+body.modo-cliente #caixaPedido,
+body.modo-cliente #btnNovo,
+body.modo-cliente #btnAdmin,
+body.modo-cliente #btnDesenvolvedor,
+body.modo-cliente #btnAtualizar,
+body.modo-cliente .btn-excluir,
+body.modo-cliente [data-acao="excluir"],
+body.modo-cliente [data-acao="editar"] {
+  display: none !important;
+}
+
+/* a vitrine do cliente ocupa a tela toda, sem a coluna do formulário */
+body.modo-cliente .painel-grade {
+  grid-template-columns: 1fr;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+/* aviso discreto de que este aparelho está no modo cliente */
+body.modo-cliente .topo-inner::after {
+  content: "modo cliente — só visualização";
+  position: absolute;
+  right: 16px;
+  bottom: -18px;
+  font-size: .68rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ouro-fosco);
+  opacity: .75;
+  pointer-events: none;
+}
+
+.selo-cargo.cliente { background: rgba(212, 175, 55, .10); color: var(--ouro-claro); border: 1px solid var(--ouro-fosco); }
+
+/* ficha aberta pelo cliente: esconde qualquer ação de edição */
+body.modo-cliente #ficha .acoes-form,
+body.modo-cliente #ficha .btn-perigo { display: none !important; }

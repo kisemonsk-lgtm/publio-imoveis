@@ -1393,6 +1393,7 @@ async function iniciar() {
   await carregarLista();
 
   try { await iniciarAcesso(); } catch (e) { console.warn("Acesso:", e.message); }
+  try { await aplicarModoCliente(); } catch (e) { console.warn("Modo cliente:", e.message); }
   ligarAdmin();
   try { await mostrarPedidoSePreciso(); } catch (e) { console.warn("Pedido:", e.message); }
 
@@ -1555,6 +1556,7 @@ async function iniciar() {
   renderLista();
   try { await rotear(); } catch (e) { console.error(e); mostrarTela("painel"); }
   try { await sincronizar(); } catch (e) { console.error(e); }
+  try { await aplicarModoCliente(); } catch (e) { console.warn("Modo cliente:", e.message); }
   try { await rotear(); } catch (e) { console.error(e); }
 
   // mantém a lista atualizada entre os aparelhos
@@ -1562,7 +1564,7 @@ async function iniciar() {
     setInterval(() => {
       if (document.hidden) return;
       if (location.hash.startsWith("#ficha/") || location.hash.startsWith("#ver/")) return;
-      sincronizar();
+      sincronizar().then(() => aplicarModoCliente()).catch(() => {});
     }, 30000);
 
     // ao voltar para a aba, busca novidades na hora
@@ -1572,12 +1574,46 @@ async function iniciar() {
   }
 }
 
+/* ==========================================================
+   MODO CLIENTE — aparelho que não é Funcionário nem ADM
+   ----------------------------------------------------------
+   Todo aparelho novo entra assim: vê as casas e mais nada.
+   Não aparece cadastro, excluir, Área do corretor nem
+   Área do desenvolvedor. Só o dono, no Modo Desenvolvedor,
+   muda a função do aparelho para Funcionário ou ADM.
+   ========================================================== */
+let modoCliente = null;    // null = ainda não sei; true = cliente; false = funcionário/ADM
+
+async function aplicarModoCliente() {
+  const perms = await minhasPermissoes();
+  const cliente = !sessao && !perms.publicar && !perms.apagar;
+  if (modoCliente === cliente) return cliente;
+  modoCliente = cliente;
+  document.body.classList.toggle("modo-cliente", cliente);
+  document.body.classList.toggle("modo-equipe", !cliente);
+
+  // botões que só a equipe vê
+  const soEquipe = ["btnNovo", "btnAdmin", "btnDesenvolvedor", "btnAtualizar"];
+  for (const id of soEquipe) {
+    const b = document.getElementById(id);
+    if (b) b.hidden = cliente;
+  }
+  // na área do cliente o link vira o "voltar" para o site das casas
+  const bCliente = document.getElementById("btnAreaCliente");
+  if (bCliente) {
+    bCliente.textContent = cliente ? "← Voltar ao site" : "👁️ Públio Cliente";
+    bCliente.href = cliente ? "publio-cliente.html" : "publio-cliente.html";
+  }
+  return cliente;
+}
+
 /* A tela nunca fica em branco: se algo demorar, mostra o que já existe no aparelho */
 function mostrarTela(destino) {
   const painel = document.getElementById("painel");
   const ficha = document.getElementById("ficha");
   const admin = document.getElementById("admin");
   if (!painel || !ficha) return;
+  if (modoCliente && destino === "admin") destino = "painel";
   if (admin) admin.hidden = destino !== "admin";
   const pedido = document.getElementById("caixaPedido");
   if (pedido && destino !== "painel") pedido.hidden = true;
@@ -1603,11 +1639,13 @@ const SENHA_PADRAO = "publio2026";
 // Credencial do dono — entra sempre como Desenvolvedor, em qualquer aparelho
 const DONO_USUARIO = "Pablo";
 const DONO_SENHA = "7733";
-const PERMISSOES_PADRAO = { ver: true, publicar: true, apagar: false };
+/* Todo aparelho novo entra como CLIENTE: só vê as casas, sem liberar nada.
+   Para virar Funcionário ou ADM, o dono precisa mudar no Modo Desenvolvedor. */
+const PERMISSOES_PADRAO = { ver: true, publicar: false, apagar: false };
 const CARGOS = {
   adm:       { nome: "ADM",        desc: "manda em tudo",                  ver: true, publicar: true, apagar: true },
   funcionario: { nome: "Funcionário", desc: "só cadastra, não apaga",        ver: true, publicar: true, apagar: false },
-  leitor:    { nome: "Só ver",     desc: "não cadastra nem apaga",        ver: true, publicar: false, apagar: false }
+  leitor:    { nome: "Cliente",    desc: "só vê as casas, não mexe em nada", ver: true, publicar: false, apagar: false }
 };
 const CODIGO_VALIDADE = 15 * 60 * 1000;   // o código do aparelho novo vale 15 min
 
@@ -1746,9 +1784,12 @@ async function registrarAparelho() {
   try {
     if (meu) {
       meu.vistoEm = Date.now();
+      // aparelho que estava "aguardando liberação" vira cliente: entra sem pedir permissão
+      if (!meu.liberado) { meu.liberado = true; meu.publicar = false; meu.apagar = false; }
       await gravarDispositivo(meu);
     } else {
-      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now(), liberado: false }, PERMISSOES_PADRAO));
+      // já entra liberado, como cliente (só vê) — não precisa de aprovação de ninguém
+      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now(), liberado: true }, PERMISSOES_PADRAO));
     }
   } catch (e) {
     console.warn("Não consegui registrar o aparelho:", e.message);
@@ -1762,18 +1803,17 @@ async function minhasPermissoes() {
   const meu = (lista || dispositivosCache || []).find((d) => d.id === aparelhoId);
   if (!meu) return Object.assign({}, PERMISSOES_PADRAO);
   if (!meu.liberado) {
-    // aparelho ainda não aprovado: só vê, não mexe em nada
-    return { ver: true, publicar: false, apagar: false, bloqueado: true };
+    // nunca mais fica travado: sem liberação o aparelho é cliente (só vê)
+    return { ver: true, publicar: false, apagar: false, cliente: true };
   }
   return { ver: meu.ver, publicar: meu.publicar, apagar: meu.apagar };
 }
 
 /* Diz qual é o cargo do aparelho, para mostrar na tela */
 function cargoDe(d) {
-  if (!d.liberado) return { nome: "Aguardando liberação", classe: "pendente" };
   if (d.apagar && d.publicar) return { nome: "ADM", classe: "adm" };
   if (d.publicar) return { nome: "Funcionário", classe: "func" };
-  return { nome: "Só ver", classe: "leitor" };
+  return { nome: "Cliente", classe: "cliente" };   // padrão de todo aparelho novo: só vê
 }
 
 function ehAdmin() { return sessao === true; }
@@ -1831,7 +1871,7 @@ function aplicarTelaPorCargo() {
   const textoCartaoAdm = document.getElementById("textoCartaoAdm");
   if (textoCartaoAdm && cargo === "desenvolvedor") {
     textoCartaoAdm.innerHTML = "Você tem acesso total: pode apagar imóveis de <b>todos os aparelhos</b>, criar usuários " +
-      "e mudar o cargo de qualquer aparelho — igual ao ADM. Use com cuidado: a exclusão não volta.";
+      "e <b>mudar a função de qualquer aparelho</b> — Cliente, Funcionário ou ADM. Use com cuidado: a exclusão não volta.";
   }
   const cartaoUsuarios = document.getElementById("cartaoUsuarios");
   if (cartaoUsuarios) cartaoUsuarios.hidden = !podeUsuarios;
@@ -1874,6 +1914,7 @@ async function tentarEntrar() {
     aviso(avisoEl, "");
     await abrirAdmin();
     await sincronizar();
+    await aplicarModoCliente();
     renderLista();
   } else {
     tentativasLogin++;
@@ -1887,6 +1928,7 @@ function sairAdmin() {
   acesso = null;
   gravarJSON(CHAVE_ACESSO + "-sessao", false);
   mostrarTela("painel");
+  aplicarModoCliente();
   renderLista();
 }
 
@@ -1904,21 +1946,18 @@ async function carregarPainelAdmin() {
   corpo.innerHTML = lista.map((d) => {
     const cargo = cargoDe(d);
     const opcoes = Object.keys(CARGOS).map((k) =>
-      `<option value="${k}" ${cargo.classe === (k === "funcionario" ? "func" : k === "leitor" ? "leitor" : "adm") ? "selected" : ""}>${CARGOS[k].nome}</option>`
+      `<option value="${k}" ${cargo.classe === (k === "funcionario" ? "func" : k === "leitor" ? "cliente" : "adm") ? "selected" : ""}>${CARGOS[k].nome}</option>`
     ).join("");
     const podeCargo = podeMudarCargo();
-    const aprovacao = (d.liberado || !podeCargo) ? "" :
-      `<button type="button" class="btn btn-primario btn-mini" data-acao="aprovar">Aprovar</button>`;
+    const aprovacao = "";   // todo aparelho já entra como cliente: não existe mais aprovar
     return `
     <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""} ${d.liberado ? "" : "pendente"}">
       <td><span class="disp-nome">${escapar(d.nome)}</span>${d.id === aparelhoId ? '<span class="sel-eu">este aparelho</span>' : ''}<span class="disp-id">${d.id.slice(0, 8)}</span></td>
       <td class="disp-data">${d.vistoEm ? quandoFoi(d.vistoEm) : "—"}</td>
       <td>
-        ${d.liberado
-          ? (podeCargo
-              ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
-              : `<span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>`)
-          : `<span class="selo-cargo pendente">Aguardando liberação</span>`}
+        ${podeCargo
+          ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
+          : `<span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>`}
       </td>
       <td class="acoes-aparelho">
         ${aprovacao}
@@ -1963,12 +2002,6 @@ async function aplicarCargo(id, cargo) {
   const d = lista.find((x) => x.id === id);
   const def = CARGOS[cargo];
   if (!d || !def) return;
-  if (id === aparelhoId && cargo !== "adm") {
-    if (!confirm(`Tirar o modo ADM DESTE aparelho (o seu)? Você ainda pode voltar a liberar por aqui, mas perde o botão de excluir enquanto estiver logado.`)) {
-      await carregarPainelAdmin();
-      return;
-    }
-  }
   d.liberado = true;
   d.ver = def.ver;
   d.publicar = def.publicar;
@@ -2109,26 +2142,17 @@ async function nuvemApagarPedido(codigo) {
   return true;
 }
 
+/* Todo aparelho novo já entra como cliente (só vê as casas).
+   Então não existe mais "pedido de acesso": a caixa de código nunca aparece. */
 async function mostrarPedidoSePreciso() {
   const caixa = document.getElementById("caixaPedido");
-  if (!caixa) return;
-  const perms = await minhasPermissoes();
-  const pendente = !sessao && (perms.bloqueado || !perms.publicar && !perms.apagar);
-  if (!pendente || location.hash) { caixa.hidden = true; return; }
-  let codigo = "------";
-  try { codigo = await garantirPedido(); }
-  catch (e) {
-    const av = document.getElementById("avisoPedido");
-    if (av) aviso(av, "Não consegui gerar o código agora: " + e.message, true);
-  }
-  document.getElementById("codigoMeuAparelho").textContent = codigo;
-  caixa.hidden = false;
+  if (caixa) caixa.hidden = true;
 }
 
 async function removerAparelho(id) {
   const d = (dispositivosCache || []).find((x) => x.id === id);
   if (!d) return;
-  if (!confirm(`Remover o aparelho "${d.nome}"? Ele volta para as permissões padrão.`)) return;
+  if (!confirm(`Remover o aparelho "${d.nome}"? Se ele abrir o site de novo, volta como Cliente (só vê as casas).`)) return;
   try {
     await nuvemFetch(sbUrl(`config_dispositivos?id=eq.${encodeURIComponent(id)}`), {
       method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" })
