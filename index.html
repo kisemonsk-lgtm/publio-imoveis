@@ -211,7 +211,7 @@
       <div class="cartao" id="cartaoUsuarios">
         <h2>Usuários da Área do corretor</h2>
         <p class="admin-sub">Quem estiver nesta lista consegue entrar com o próprio usuário e senha.
-          Os cargos <b>ADM</b> e <b>Desenvolvedor</b> podem criar e remover usuários; o <b>Funcionário</b> não.
+          Só o cargo <b>Desenvolvedor</b> pode criar e remover usuários. O <b>ADM</b> manda nos imóveis e aparelhos, mas não mexe em usuários.
           Os <b>usuários</b> ficam salvos neste aparelho — para entrar em outro, cadastre o mesmo usuário e senha lá também.</p>
 
         <div class="tabela-dispositivos">
@@ -245,9 +245,9 @@
             <label class="campo">
               <span>Cargo</span>
               <select id="cargoNovoUsuario">
-                <option value="adm" selected>ADM (manda em tudo)</option>
-                <option value="desenvolvedor">Desenvolvedor (cria usuários)</option>
-                <option value="funcionario">Funcionário</option>
+                <option value="funcionario" selected>Funcionário</option>
+                <option value="adm">ADM (manda em tudo, sem mexer em usuários)</option>
+                <option value="desenvolvedor">Desenvolvedor (acesso total + usuários)</option>
               </select>
             </label>
           </div>

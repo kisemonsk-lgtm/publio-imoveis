@@ -1731,9 +1731,9 @@ function gravarUsuarios() {
 }
 
 const CARGOS_USUARIO = {
-  adm:          { nome: "ADM",          criaUsuarios: true,  tudo: true },
+  adm:          { nome: "ADM",           criaUsuarios: false, tudo: true },
   desenvolvedor: { nome: "Desenvolvedor", criaUsuarios: true,  tudo: true },
-  funcionario:  { nome: "Funcionário",  criaUsuarios: false, tudo: false }
+  funcionario:  { nome: "Funcionário",   criaUsuarios: false, tudo: false }
 };
 
 function nomeDoCargoUsuario(c) {
@@ -1756,7 +1756,7 @@ function ehAdminDeVerdade() {
 async function salvarCredenciais() {
   const avisoEl = document.getElementById("senhaAviso");
   if (!podeGerenciarUsuarios()) {
-    aviso(avisoEl, "Só ADM ou Desenvolvedor podem criar e alterar usuários.", true);
+    aviso(avisoEl, "Só o Desenvolvedor pode criar e alterar usuários.", true);
     return;
   }
   const u = (document.getElementById("novoUsuario").value || "").trim();
@@ -1792,7 +1792,7 @@ async function salvarCredenciais() {
 /* Abre o formulário de usuário (novo ou troca de senha) */
 function abrirFormUsuario(nome) {
   if (!podeGerenciarUsuarios()) {
-    aviso(document.getElementById("senhaAviso"), "Só ADM ou Desenvolvedor podem criar e alterar usuários.", true);
+    aviso(document.getElementById("senhaAviso"), "Só o Desenvolvedor pode criar e alterar usuários.", true);
     return;
   }
   const box = document.getElementById("formUsuario");
@@ -1841,13 +1841,13 @@ function renderUsuarios() {
 
 async function removerUsuario(nome) {
   if (!podeGerenciarUsuarios()) {
-    aviso(document.getElementById("senhaAviso"), "Só ADM ou Desenvolvedor podem remover usuários.", true);
+    aviso(document.getElementById("senhaAviso"), "Só o Desenvolvedor pode remover usuários.", true);
     return;
   }
   const alvo = usuarios.find((x) => x.usuario === nome);
   if (!alvo) return;
-  if (alvo.cargo === "adm" && !ehAdminDeVerdade()) {
-    aviso(document.getElementById("senhaAviso"), "Só um ADM pode remover outro ADM.", true);
+  if (alvo.cargo === "desenvolvedor") {
+    aviso(document.getElementById("senhaAviso"), "Só outro Desenvolvedor pode remover um Desenvolvedor.", true);
     return;
   }
   if (usuarios.length === 1) { aviso(document.getElementById("senhaAviso"), "Não dá para remover o último usuário.", true); return; }
@@ -1861,8 +1861,8 @@ async function removerUsuario(nome) {
 
 function trocarSenhaDe(nome) {
   const alvo = usuarios.find((x) => x.usuario === nome);
-  if (alvo && alvo.cargo === "adm" && !ehAdminDeVerdade()) {
-    aviso(document.getElementById("senhaAviso"), "Só um ADM pode trocar a senha de outro ADM.", true);
+  if (alvo && alvo.cargo === "desenvolvedor" && (!acesso || acesso.cargo !== "desenvolvedor")) {
+    aviso(document.getElementById("senhaAviso"), "Só um Desenvolvedor pode trocar a senha de outro Desenvolvedor.", true);
     return;
   }
   abrirFormUsuario(nome);
