@@ -78,11 +78,14 @@ body.abertura-ativa { overflow: hidden; }
    Aqui a porta fica FECHADA quando a pessoa clica em Entrar: as folhas
    deslizam para os lados e o site aparece. */
 .abertura-porta {
-  position: static;
+  position: absolute;            /* ocupa a tela toda, para as folhas irem de ponta a ponta */
+  inset: 0;
+  z-index: 4;
   display: grid;
   place-items: center;
   width: 100%;
   padding: 0;
+  pointer-events: none;
 }
 .abertura-porta::before,
 .abertura-porta::after {
@@ -92,6 +95,7 @@ body.abertura-ativa { overflow: hidden; }
   bottom: 0;
   left: 50%;
   width: 50.5%;                  /* cada folha pega metade da tela */
+  height: 100%;                  /* altura da TELA inteira (não do conteúdo) */
   z-index: 3;
   pointer-events: none;
   visibility: hidden;            /* só aparecem no clique em Entrar */
