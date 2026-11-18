@@ -1,7 +1,7 @@
 /* ==========================================================
    ÁREA DO CLIENTE — só as casas, nada mais
    ----------------------------------------------------------
-   É uma página separada (cliente.html). Ela NÃO usa o app do
+   É uma página separada (publio-cliente.html). Ela NÃO usa o app do
    corretor: fala direto com a nuvem (Supabase) e só consegue
    LER. Não existe aqui cadastro, edição, exclusão, área do
    corretor nem nada de administração.

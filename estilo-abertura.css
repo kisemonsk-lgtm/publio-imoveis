@@ -72,6 +72,77 @@ body.abertura-ativa { overflow: hidden; }
   animation: abrirPo linear infinite;
 }
 
+/* ---------------- o "abrir no meio": duas portas douradas ---------------- */
+.abertura-porta {
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  animation: portaAbre 1s cubic-bezier(.22, .61, .36, 1) both .15s;
+}
+.abertura-porta::before,
+.abertura-porta::after {
+  content: "";
+  position: absolute;
+  top: -34px;
+  bottom: -34px;
+  width: calc(50% + 2px);
+  z-index: 3;
+  pointer-events: none;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 246, 221, .10), transparent 30%, transparent 70%, rgba(0, 0, 0, .45)),
+    linear-gradient(155deg, #2a2416 0%, #14120c 42%, #0a0907 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 175, 55, .45),
+    inset 0 0 46px rgba(0, 0, 0, .85),
+    0 0 40px rgba(0, 0, 0, .55);
+  animation-duration: 1.5s;
+  animation-timing-function: cubic-bezier(.7, 0, .3, 1);
+  animation-fill-mode: both;
+  animation-delay: .1s;
+}
+.abertura-porta::before {
+  right: 50%;
+  transform-origin: right center;
+  border-right: 1px solid rgba(232, 199, 102, .75);
+  animation-name: portaEsq;
+}
+.abertura-porta::after {
+  left: 50%;
+  transform-origin: left center;
+  border-left: 1px solid rgba(232, 199, 102, .75);
+  animation-name: portaDir;
+}
+/* fio de luz que sai do meio quando as portas se abrem */
+.abertura-porta-painel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 18px;
+  width: 100%;
+  padding: 10px 0;
+  animation: painelSurge .9s cubic-bezier(.22, .61, .36, 1) both .55s;
+}
+
+@keyframes portaEsq {
+  0%   { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
+  100% { transform: perspective(1200px) rotateY(-104deg); opacity: 0; }
+}
+@keyframes portaDir {
+  0%   { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
+  100% { transform: perspective(1200px) rotateY(104deg); opacity: 0; }
+}
+@keyframes portaAbre { from { opacity: 0; } to { opacity: 1; } }
+@keyframes painelSurge {
+  0%   { opacity: 0; transform: scale(.86); filter: blur(6px); }
+  100% { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
 /* ---------------- conteúdo ---------------- */
 .abertura-conteudo {
   position: relative;
@@ -260,11 +331,13 @@ body.abertura-ativa { overflow: hidden; }
 
 /* quem prefere menos movimento vê tudo parado */
 @media (prefers-reduced-motion: reduce) {
-  .abertura, .abertura::before, .abertura-linha, .abertura-logo,
+  .abertura, .abertura::before, .abertura-linha, .abertura-porta, .abertura-porta::before,
+  .abertura-porta::after, .abertura-porta-painel, .abertura-logo,
   .abertura-logo img, .abertura-logo::before, .abertura-logo::after,
   .abertura-nome, .abertura-sub, .abertura-frase,
   .abertura .btn-entrar, .abertura .btn-entrar::after, .abertura-pe, .abertura-po i {
     animation: none !important;
   }
   .abertura-nome { background-position: 0 0; }
+  .abertura-porta::before, .abertura-porta::after { display: none; }
 }

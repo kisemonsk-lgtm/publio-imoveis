@@ -9,7 +9,7 @@
 (function () {
   "use strict";
 
-  var CHAVE = "publio-abertura-v1";
+  var CHAVE = "publio-abertura-v2";
   var el = null;
   var indo = false;
 
@@ -81,9 +81,10 @@
       el.classList.remove("saindo");
       el = null;
       indo = false;
-      // o campo de título já fica pronto para digitar
+      // o campo de título já fica pronto para digitar (só no painel do corretor)
       var t = document.getElementById("f-titulo");
-      if (t && !document.getElementById("painel").hidden) {
+      var painel = document.getElementById("painel");
+      if (t && painel && !painel.hidden) {
         try { t.focus({ preventScroll: true }); } catch (_) { }
       }
     };
