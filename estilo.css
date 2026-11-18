@@ -671,3 +671,15 @@ input:focus, select:focus, textarea:focus {
   margin: 14px 0 18px;
 }
 .cartao-pedido .acoes-form { justify-content: center; }
+
+/* ---------- Formulário de usuário (aparece ao clicar em + Novo usuário) ---------- */
+.form-usuario {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px dashed var(--borda);
+  border-radius: 12px;
+  background: rgba(212, 175, 55, .04);
+  animation: surgir .18s ease-out;
+}
+@keyframes surgir { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.form-usuario .rotulo-desc { margin-top: 0; }

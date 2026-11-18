@@ -183,25 +183,61 @@
       </div>
 
       <div class="cartao">
-        <h2>Trocar a senha</h2>
-        <div class="linha">
-          <label class="campo">
-            <span>Usuário</span>
-            <input id="novoUsuario" type="text" placeholder="admin" />
-          </label>
-          <label class="campo">
-            <span>Senha nova</span>
-            <input id="novaSenha" type="password" placeholder="mínimo 6 caracteres" />
-          </label>
+        <h2>Usuários da Área do corretor</h2>
+        <p class="admin-sub">Quem estiver nesta lista consegue entrar com o próprio usuário e senha.
+          Os <b>usuários</b> ficam salvos neste aparelho — para entrar em outro, cadastre o mesmo usuário e senha lá também.</p>
+
+        <div class="tabela-dispositivos">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Cargo</th>
+                <th>Desde</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="listaUsuarios"></tbody>
+          </table>
         </div>
-        <label class="campo">
-          <span>Repita a senha nova</span>
-          <input id="novaSenha2" type="password" />
-        </label>
+        <p id="usuariosVazio" class="vazio">Nenhum usuário cadastrado.</p>
+
         <div class="acoes-form">
-          <button type="button" class="btn btn-primario" id="btnSalvarSenha">Salvar usuário e senha</button>
+          <button type="button" class="btn btn-primario" id="btnNovoUsuario">+ Novo usuário</button>
         </div>
         <p id="senhaAviso" class="aviso" hidden></p>
+
+        <!-- formulário que só aparece quando clica no + -->
+        <div id="formUsuario" class="form-usuario" hidden>
+          <h3 class="rotulo-desc" id="formUsuarioTitulo">Novo usuário</h3>
+          <div class="linha">
+            <label class="campo">
+              <span>Nome de usuário</span>
+              <input id="novoUsuario" type="text" placeholder="Ex.: joao" autocomplete="off" />
+            </label>
+            <label class="campo">
+              <span>Cargo</span>
+              <select id="cargoNovoUsuario">
+                <option value="adm" selected>ADM (manda em tudo)</option>
+                <option value="funcionario">Funcionário</option>
+              </select>
+            </label>
+          </div>
+          <div class="linha">
+            <label class="campo">
+              <span>Senha</span>
+              <input id="novaSenha" type="password" placeholder="mínimo 6 caracteres" autocomplete="new-password" />
+            </label>
+            <label class="campo">
+              <span>Repita a senha</span>
+              <input id="novaSenha2" type="password" autocomplete="new-password" />
+            </label>
+          </div>
+          <div class="acoes-form">
+            <button type="button" class="btn btn-primario" id="btnSalvarSenha">Salvar usuário</button>
+            <button type="button" class="btn btn-neutro" id="btnCancelarUsuario">Cancelar</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>

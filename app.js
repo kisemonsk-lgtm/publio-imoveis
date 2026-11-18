@@ -1305,7 +1305,8 @@ const CARGOS = {
 };
 const CODIGO_VALIDADE = 15 * 60 * 1000;   // o código do aparelho novo vale 15 min
 
-let acesso = null;              // { usuario, senhaHash, desde }
+let usuarios = [];              // [{ usuario, senhaHash, cargo, desde }]
+let acesso = null;              // quem está logado agora
 let sessao = false;             // entrou nesta sessão do navegador?
 let aparelhoId = "";
 let aparelhoNome = "";
@@ -1337,12 +1338,28 @@ async function sha256(texto) {
   return "fb" + h1.toString(16) + h2.toString(16);
 }
 
-/* Cria o acesso na primeira vez e recupera o aparelho */
+/* Cria os usuários na primeira vez, migra o formato antigo (1 usuário) e recupera o aparelho */
 async function iniciarAcesso() {
-  acesso = lerJSON(CHAVE_ACESSO, null);
-  if (!acesso || !acesso.usuario) {
-    acesso = Object.assign({}, ACESSO_PADRAO, { senhaHash: await sha256(SENHA_PADRAO), desde: Date.now() });
-    gravarJSON(CHAVE_ACESSO, acesso);
+  const salvo = lerJSON(CHAVE_ACESSO, null);
+  if (Array.isArray(salvo) && salvo.length) {
+    usuarios = salvo;
+  } else if (salvo && salvo.usuario) {
+    // formato antigo: um único usuário -> vira o primeiro ADM da lista
+    usuarios = [{
+      usuario: salvo.usuario,
+      senhaHash: salvo.senhaHash,
+      cargo: "adm",
+      desde: salvo.desde || Date.now()
+    }];
+    gravarJSON(CHAVE_ACESSO, usuarios);
+  } else {
+    usuarios = [{
+      usuario: ACESSO_PADRAO.usuario,
+      senhaHash: await sha256(SENHA_PADRAO),
+      cargo: "adm",
+      desde: Date.now()
+    }];
+    gravarJSON(CHAVE_ACESSO, usuarios);
   }
   sessao = lerJSON(CHAVE_ACESSO + "-sessao", false) === true;
 
@@ -1452,7 +1469,7 @@ async function abrirAdmin() {
   painel.hidden = !sessao;
   if (!sessao) {
     const u = document.getElementById("loginUsuario");
-    if (u) { u.value = acesso ? acesso.usuario : "admin"; setTimeout(() => document.getElementById("loginSenha").focus(), 60); }
+    if (u) { u.value = usuarios.length === 1 ? usuarios[0].usuario : ""; setTimeout(() => document.getElementById("loginSenha").focus(), 60); }
     aviso(document.getElementById("loginAviso"), "");
   } else {
     await carregarPainelAdmin();
@@ -1470,7 +1487,9 @@ async function tentarEntrar() {
   const senha = document.getElementById("loginSenha").value || "";
   if (!usuario || !senha) { aviso(avisoEl, "Preencha usuário e senha.", true); return; }
   const hash = await sha256(senha);
-  if (usuario.toLowerCase() === String(acesso.usuario).toLowerCase() && hash === acesso.senhaHash) {
+  const achou = usuarios.find((x) => String(x.usuario).toLowerCase() === usuario.toLowerCase() && x.senhaHash === hash);
+  if (achou) {
+    acesso = achou;
     sessao = true;
     tentativasLogin = 0;
     gravarJSON(CHAVE_ACESSO + "-sessao", true);
@@ -1488,6 +1507,7 @@ async function tentarEntrar() {
 
 function sairAdmin() {
   sessao = false;
+  acesso = null;
   gravarJSON(CHAVE_ACESSO + "-sessao", false);
   mostrarTela("painel");
   renderLista();
@@ -1527,8 +1547,7 @@ async function carregarPainelAdmin() {
     </tr>`;
   }).join("");
   document.getElementById("dispVazio").hidden = lista.length > 0;
-  const nu = document.getElementById("novoUsuario");
-  if (nu) nu.value = acesso.usuario;
+  renderUsuarios();
 }
 
 function escapar(t) {
@@ -1653,19 +1672,107 @@ async function removerAparelho(id) {
   await carregarPainelAdmin();
 }
 
+/* Salva a lista de usuários neste aparelho */
+function gravarUsuarios() {
+  gravarJSON(CHAVE_ACESSO, usuarios);
+}
+
+function nomeDoCargoUsuario(c) {
+  return c === "adm" ? "ADM" : "Funcionário";
+}
+
+/* Adiciona um usuário novo (ou troca a senha de um que já existe) */
 async function salvarCredenciais() {
   const avisoEl = document.getElementById("senhaAviso");
   const u = (document.getElementById("novoUsuario").value || "").trim();
   const s1 = document.getElementById("novaSenha").value || "";
   const s2 = document.getElementById("novaSenha2").value || "";
+  const cargo = (document.getElementById("cargoNovoUsuario") || {}).value || "adm";
   if (!u) { aviso(avisoEl, "Informe o usuário.", true); return; }
+  if (!/^[a-zA-Z0-9._-]{3,}$/.test(u)) { aviso(avisoEl, "Usuário: mínimo 3 letras, sem espaços (pode usar . _ -).", true); return; }
   if (s1.length < 6) { aviso(avisoEl, "A senha precisa ter pelo menos 6 caracteres.", true); return; }
   if (s1 !== s2) { aviso(avisoEl, "As duas senhas não são iguais.", true); return; }
-  acesso = { usuario: u, senhaHash: await sha256(s1), desde: Date.now() };
-  gravarJSON(CHAVE_ACESSO, acesso);
+
+  const hash = await sha256(s1);
+  const existente = usuarios.find((x) => String(x.usuario).toLowerCase() === u.toLowerCase());
+  if (existente) {
+    existente.senhaHash = hash;
+    existente.cargo = cargo;
+    existente.desde = Date.now();
+    aviso(avisoEl, `Senha de "${existente.usuario}" atualizada.`);
+  } else {
+    usuarios.push({ usuario: u, senhaHash: hash, cargo, desde: Date.now() });
+    aviso(avisoEl, `Usuário "${u}" criado como ${nomeDoCargoUsuario(cargo)}.`);
+  }
+  gravarUsuarios();
+  const msg = avisoEl && avisoEl.textContent ? avisoEl.textContent : "";
+  document.getElementById("novoUsuario").value = "";
   document.getElementById("novaSenha").value = "";
   document.getElementById("novaSenha2").value = "";
-  aviso(avisoEl, "Usuário e senha salvos neste aparelho.");
+  renderUsuarios();
+  fecharFormUsuario();
+  aviso(avisoEl, msg);
+}
+
+/* Abre o formulário de usuário (novo ou troca de senha) */
+function abrirFormUsuario(nome) {
+  const box = document.getElementById("formUsuario");
+  const titulo = document.getElementById("formUsuarioTitulo");
+  if (!box) return;
+  box.hidden = false;
+  const alvo = nome ? usuarios.find((x) => x.usuario === nome) : null;
+  document.getElementById("novoUsuario").value = alvo ? alvo.usuario : "";
+  document.getElementById("novoUsuario").readOnly = !!alvo;
+  document.getElementById("novaSenha").value = "";
+  document.getElementById("novaSenha2").value = "";
+  const sel = document.getElementById("cargoNovoUsuario");
+  if (sel) sel.value = alvo ? (alvo.cargo || "adm") : "adm";
+  if (titulo) titulo.textContent = alvo ? `Nova senha de "${alvo.usuario}"` : "Novo usuário";
+  aviso(document.getElementById("senhaAviso"), "");
+  (alvo ? document.getElementById("novaSenha") : document.getElementById("novoUsuario")).focus();
+  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function fecharFormUsuario() {
+  const box = document.getElementById("formUsuario");
+  if (box) box.hidden = true;
+  const campo = document.getElementById("novoUsuario");
+  if (campo) campo.readOnly = false;
+  aviso(document.getElementById("senhaAviso"), "");
+}
+
+/* Mostra a lista de usuários na tela */
+function renderUsuarios() {
+  const corpo = document.getElementById("listaUsuarios");
+  if (!corpo) return;
+  corpo.innerHTML = usuarios.map((u) => `
+    <tr data-usuario="${escapar(u.usuario)}">
+      <td><span class="disp-nome">${escapar(u.usuario)}</span>${acesso && acesso.usuario === u.usuario ? '<span class="sel-eu">logado agora</span>' : ''}</td>
+      <td><span class="selo-cargo ${u.cargo === "adm" ? "adm" : "func"}">${nomeDoCargoUsuario(u.cargo)}</span></td>
+      <td class="disp-data">${u.desde ? quandoFoi(u.desde) : "—"}</td>
+      <td class="acoes-aparelho">
+        <button type="button" class="btn btn-neutro btn-mini" data-acao="trocar-senha">Trocar senha</button>
+        <button type="button" class="btn btn-perigo btn-mini" data-acao="remover-usuario">Remover</button>
+      </td>
+    </tr>`).join("");
+  const vazio = document.getElementById("usuariosVazio");
+  if (vazio) vazio.hidden = usuarios.length > 0;
+}
+
+async function removerUsuario(nome) {
+  const alvo = usuarios.find((x) => x.usuario === nome);
+  if (!alvo) return;
+  if (usuarios.length === 1) { aviso(document.getElementById("senhaAviso"), "Não dá para remover o último usuário.", true); return; }
+  if (!confirm(`Remover o usuário "${nome}"? Ele não vai mais conseguir entrar na Área do corretor.`)) return;
+  usuarios = usuarios.filter((x) => x.usuario !== nome);
+  gravarUsuarios();
+  if (acesso && acesso.usuario === nome) sairAdmin();
+  aviso(document.getElementById("senhaAviso"), `Usuário "${nome}" removido.`);
+  renderUsuarios();
+}
+
+function trocarSenhaDe(nome) {
+  abrirFormUsuario(nome);
 }
 
 /* Liga os botões da área do corretor */
@@ -1680,6 +1787,20 @@ function ligarAdmin() {
   if (bSair) bSair.addEventListener("click", sairAdmin);
   const bSenha = document.getElementById("btnSalvarSenha");
   if (bSenha) bSenha.addEventListener("click", salvarCredenciais);
+  const bNovoU = document.getElementById("btnNovoUsuario");
+  if (bNovoU) bNovoU.addEventListener("click", () => abrirFormUsuario());
+  const bCancU = document.getElementById("btnCancelarUsuario");
+  if (bCancU) bCancU.addEventListener("click", () => fecharFormUsuario());
+  const corpoU = document.getElementById("listaUsuarios");
+  if (corpoU) {
+    corpoU.addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-acao]");
+      if (!b) return;
+      const nome = b.closest("tr").dataset.usuario;
+      if (b.dataset.acao === "remover-usuario") removerUsuario(nome);
+      else if (b.dataset.acao === "trocar-senha") trocarSenhaDe(nome);
+    });
+  }
   const senha = document.getElementById("loginSenha");
   if (senha) senha.addEventListener("keydown", (ev) => { if (ev.key === "Enter") tentarEntrar(); });
 
