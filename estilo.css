@@ -1,0 +1,357 @@
+:root {
+  /* tema escuro com dourado */
+  --fundo: #0c0b09;
+  --fundo-2: #141210;
+  --cartao: #17150f;
+  --cartao-2: #1d1a13;
+  --linha: #2b2719;
+  --borda: #34301f;
+  --texto: #f3ecdc;
+  --texto-suave: #a89c81;
+  --ouro: #d4af37;
+  --ouro-claro: #e8c766;
+  --ouro-fosco: #8f7327;
+  --perigo: #e0574c;
+  --raio: 14px;
+  --sombra: 0 2px 8px rgba(0, 0, 0, .55), 0 16px 40px rgba(0, 0, 0, .45);
+  --brilho: 0 0 0 3px rgba(212, 175, 55, .18);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(900px 480px at 12% -10%, rgba(212, 175, 55, .10), transparent 62%),
+    radial-gradient(700px 420px at 105% 8%, rgba(212, 175, 55, .06), transparent 60%),
+    var(--fundo);
+  background-attachment: fixed;
+  color: var(--texto);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -.01em; }
+h1 { font-size: 1.25rem; }
+h2 { font-size: 1.15rem; }
+h3 { font-size: .95rem; }
+
+::selection { background: rgba(212, 175, 55, .32); color: #fff; }
+
+/* ---------- Topo ---------- */
+.topo {
+  background: rgba(12, 11, 9, .92);
+  backdrop-filter: blur(10px);
+  color: var(--texto);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--borda);
+  box-shadow: 0 1px 0 rgba(212, 175, 55, .22), 0 10px 30px rgba(0, 0, 0, .5);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.topo-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.marca { display: flex; align-items: center; gap: 12px; }
+.marca p { margin: 0; font-size: .8rem; color: var(--texto-suave); }
+.logo-img {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  display: block;
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, .38), 0 6px 20px rgba(0, 0, 0, .55);
+}
+.marca h1 {
+  background: linear-gradient(100deg, #fff6dd, var(--ouro));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------- Layout ---------- */
+.conteudo { max-width: 1180px; margin: 0 auto; padding: 20px 18px 60px; }
+.painel-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 880px) {
+  .painel-grade { grid-template-columns: 1fr; }
+}
+
+.cartao {
+  background: linear-gradient(180deg, var(--cartao-2), var(--cartao));
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  box-shadow: var(--sombra);
+  padding: 18px;
+}
+.cartao h2 { margin-bottom: 14px; color: var(--texto); }
+.cartao h2::after {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 2px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, var(--ouro), transparent);
+}
+.cartao-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.cartao-cabecalho h2 { margin: 0; }
+.cartao-cabecalho h2::after { display: none; }
+
+/* ---------- Formulário ---------- */
+.campo { display: block; margin-bottom: 12px; }
+.campo > span {
+  display: block;
+  font-size: .78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--texto-suave);
+  margin-bottom: 5px;
+}
+input[type="text"], input[type="search"], input[type="file"], select, textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--texto);
+  background: #100f0b;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+input::placeholder, textarea::placeholder { color: #6d6450; }
+textarea { resize: vertical; min-height: 120px; }
+select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--ouro) 50%), linear-gradient(135deg, var(--ouro) 50%, transparent 50%); background-position: calc(100% - 18px) 52%, calc(100% - 13px) 52%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 34px; }
+input[type="file"] { padding: 8px; font-size: .85rem; color: var(--texto-suave); }
+input[type="file"]::file-selector-button {
+  font: inherit; font-size: .82rem; font-weight: 600;
+  margin-right: 10px; padding: 6px 12px;
+  border-radius: 8px; cursor: pointer;
+  color: #17140a; border: 0;
+  background: linear-gradient(145deg, var(--ouro-claro), var(--ouro-fosco));
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--ouro-fosco);
+  background: #131109;
+  box-shadow: var(--brilho);
+}
+.linha { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { .linha { grid-template-columns: 1fr; } }
+
+.acoes-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+
+/* ---------- Botões ---------- */
+.btn {
+  font: inherit;
+  font-weight: 600;
+  font-size: .9rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: transform .08s, filter .15s, background .15s, border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.btn:active { transform: translateY(1px); }
+
+.btn-primario {
+  background: linear-gradient(145deg, var(--ouro-claro), var(--ouro-fosco));
+  color: #17140a;
+  box-shadow: 0 6px 18px rgba(212, 175, 55, .16);
+}
+.btn-primario:hover { filter: brightness(1.1); }
+
+.btn-destaque {
+  background: transparent;
+  color: var(--ouro-claro);
+  border-color: var(--ouro-fosco);
+}
+.btn-destaque:hover { background: rgba(212, 175, 55, .12); color: #fff2cd; }
+
+.btn-neutro {
+  background: #1a1710;
+  color: var(--texto);
+  border-color: var(--borda);
+}
+.btn-neutro:hover { background: #221e14; border-color: var(--ouro-fosco); }
+
+.btn-mini { padding: 6px 10px; font-size: .8rem; border-radius: 8px; }
+
+.btn-perigo { background: transparent; color: var(--perigo); border-color: #4a2621; }
+.btn-perigo:hover { background: rgba(224, 87, 76, .12); border-color: var(--perigo); }
+
+.aviso {
+  margin: 10px 0 0;
+  font-size: .85rem;
+  font-weight: 600;
+  color: var(--ouro-claro);
+  background: rgba(212, 175, 55, .09);
+  border: 1px solid rgba(212, 175, 55, .32);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+.aviso.erro { color: #ff8b80; background: rgba(224, 87, 76, .1); border-color: rgba(224, 87, 76, .38); }
+
+/* ---------- Lista ---------- */
+.busca { max-width: 260px; }
+.lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 8px;
+  background: #131109;
+  transition: border-color .15s, background .15s;
+}
+.item:hover { border-color: var(--ouro-fosco); background: #17140d; }
+.item img {
+  width: 76px; height: 62px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #221e14;
+  border: 1px solid var(--borda);
+}
+.item-info { min-width: 0; }
+.item-info strong { display: block; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--texto); }
+.item-info small { color: var(--texto-suave); font-size: .8rem; }
+.item-acoes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 560px) {
+  .item { grid-template-columns: 64px minmax(0, 1fr); }
+  .item img { width: 64px; height: 56px; }
+  .item-acoes { grid-column: 1 / -1; justify-content: flex-start; }
+}
+.vazio { color: var(--texto-suave); font-size: .9rem; text-align: center; padding: 24px 8px; margin: 0; }
+
+/* ---------- Ficha do cliente ---------- */
+.ficha-barra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.ficha-dica { font-size: .82rem; color: var(--texto-suave); }
+.link-box { display: flex; gap: 8px; flex: 1; min-width: 260px; }
+.link-box input { font-size: .82rem; color: var(--texto-suave); }
+
+.ficha-card {
+  background: linear-gradient(180deg, var(--cartao-2), var(--cartao));
+  border: 1px solid var(--borda);
+  border-radius: 18px;
+  box-shadow: var(--sombra);
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+}
+@media (max-width: 860px) {
+  .ficha-card { grid-template-columns: 1fr; }
+}
+.ficha-imagem-wrap {
+  background: #0a0907;
+  min-height: 320px;
+  display: flex;
+  border-right: 1px solid var(--borda);
+}
+@media (max-width: 860px) {
+  .ficha-imagem-wrap { border-right: 0; border-bottom: 1px solid var(--borda); }
+}
+.ficha-imagem-wrap img {
+  width: 100%;
+  height: 100%;
+  max-height: 620px;
+  object-fit: cover;
+  display: block;
+}
+.ficha-corpo { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.etiqueta {
+  margin: 0 0 6px;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ouro);
+}
+.ficha-topo { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.ficha-topo h2 { font-size: 1.5rem; color: #fff8e8; }
+.local { margin: 6px 0 0; color: var(--texto-suave); font-size: .9rem; }
+.preco {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 800;
+  background: linear-gradient(100deg, #fff3cf, var(--ouro));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+}
+.rotulo-desc {
+  margin: 6px 0 0;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: .76rem;
+  color: var(--texto-suave);
+}
+.descricao {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: .98rem;
+  line-height: 1.65;
+  color: #ded4bd;
+  border-left: 3px solid var(--ouro-fosco);
+  padding-left: 14px;
+  flex: 1;
+}
+.ficha-acoes {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid var(--borda);
+}
+
+/* ---------- Rodapé com a marca ---------- */
+.rodape-marca {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+  padding: 14px 8px;
+  border-top: 1px solid var(--borda);
+  color: var(--texto-suave);
+  font-size: .8rem;
+  letter-spacing: .02em;
+  text-align: center;
+}
+.rodape-marca img {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(212, 175, 55, .3);
+}

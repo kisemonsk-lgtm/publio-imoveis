@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Públio Imóveis — Fichas de Imóveis</title>
+<link rel="icon" href="logo-publio.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="theme-color" content="#0c0b09" />
+<meta name="color-scheme" content="dark" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="estilo.css" />
+</head>
+<body>
+
+<header class="topo">
+  <div class="topo-inner">
+    <div class="marca">
+      <img class="logo-img" src="logo-publio.png" alt="Públio Imóveis" />
+      <div>
+        <h1>Públio Imóveis</h1>
+        <p>Mais que imóveis, realizamos histórias</p>
+      </div>
+    </div>
+    <button id="btnNovo" class="btn btn-primario">+ Novo imóvel</button>
+  </div>
+</header>
+
+<main class="conteudo">
+
+  <!-- ============ PAINEL DO CORRETOR ============ -->
+  <section id="painel" class="painel">
+    <div class="painel-grade">
+
+      <form id="form" class="cartao" autocomplete="off">
+        <h2>Cadastrar imóvel</h2>
+
+        <label class="campo">
+          <span>Título do anúncio</span>
+          <input id="f-titulo" type="text" placeholder="Ex.: Casa 3 quartos no Centro" required />
+        </label>
+
+        <div class="linha">
+          <label class="campo">
+            <span>Tipo</span>
+            <select id="f-tipo">
+              <option>Casa</option>
+              <option>Apartamento</option>
+              <option>Terreno</option>
+              <option>Sítio / Chácara</option>
+              <option>Galpão / Armazém</option>
+              <option>Sala comercial</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span>Finalidade</span>
+            <select id="f-finalidade">
+              <option>Venda</option>
+              <option>Aluguel</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="linha">
+          <label class="campo">
+            <span>Preço (R$)</span>
+            <input id="f-preco" type="text" inputmode="decimal" placeholder="450.000,00" />
+          </label>
+          <label class="campo">
+            <span>Cidade / Bairro</span>
+            <input id="f-local" type="text" placeholder="Cidade — Bairro" />
+          </label>
+        </div>
+
+        <label class="campo">
+          <span>Imagem da casa</span>
+          <input id="f-imagem" type="file" accept="image/*" />
+        </label>
+
+        <label class="campo">
+          <span>Descrição</span>
+          <textarea id="f-descricao" rows="6" placeholder="Escreva aqui a descrição completa do imóvel..."></textarea>
+        </label>
+
+        <div class="acoes-form">
+          <button type="submit" class="btn btn-primario" id="btnSalvar">Salvar imóvel</button>
+          <button type="button" class="btn btn-neutro" id="btnLimpar">Limpar</button>
+        </div>
+        <p id="avisoForm" class="aviso" hidden></p>
+      </form>
+
+      <div class="cartao">
+        <div class="cartao-cabecalho">
+          <h2>Meus imóveis</h2>
+          <input id="busca" type="search" placeholder="Buscar por título, cidade..." class="busca" />
+        </div>
+        <ul id="lista" class="lista"></ul>
+        <p id="listaVazia" class="vazio">Nenhum imóvel cadastrado ainda.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============ FICHA PARA O CLIENTE ============ -->
+  <section id="ficha" class="ficha" hidden>
+    <div class="ficha-barra">
+      <button class="btn btn-neutro" id="btnVoltar">← Voltar ao painel</button>
+      <span class="ficha-dica">Link desta ficha — envie para o cliente:</span>
+      <div class="link-box">
+        <input id="linkFicha" type="text" readonly />
+        <button class="btn btn-primario" id="btnCopiarLink">Copiar link</button>
+      </div>
+    </div>
+
+    <article class="ficha-card">
+      <div class="ficha-imagem-wrap">
+        <img id="fichaImagem" alt="Foto do imóvel" />
+      </div>
+
+      <div class="ficha-corpo">
+        <div class="ficha-topo">
+          <div>
+            <p id="fichaEtiqueta" class="etiqueta"></p>
+            <h2 id="fichaTitulo"></h2>
+            <p id="fichaLocal" class="local"></p>
+          </div>
+          <p id="fichaPreco" class="preco"></p>
+        </div>
+
+        <h3 class="rotulo-desc">Descrição do imóvel</h3>
+        <p id="fichaDescricao" class="descricao"></p>
+
+        <div class="ficha-acoes">
+          <a id="btnBaixarImagem" class="btn btn-primario" download>⬇ Baixar imagem</a>
+          <button id="btnCopiarDescricao" class="btn btn-destaque">⧉ Copiar descrição</button>
+          <button id="btnCopiarTudo" class="btn btn-neutro">⧉ Copiar imagem + descrição</button>
+        </div>
+        <p id="avisoFicha" class="aviso" hidden></p>
+      </div>
+    </article>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
