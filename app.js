@@ -16,12 +16,12 @@ const STORE_META = "meta";
    O passo a passo está em COMO-ATIVAR-A-NUVEM.md.                        */
 const NUVEM = {
   firebase: {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    messagingSenderId: "",
-    appId: ""
+    apiKey: "AIzaSyCnOr5JEkRhZmqaov_uVib2GbJzfp7U-gk",
+    authDomain: "publio-imoveis-v1.firebaseapp.com",
+    projectId: "publio-imoveis-v1",
+    storageBucket: "publio-imoveis-v1.firebasestorage.app",
+    messagingSenderId: "917200805284",
+    appId: "1:917200805284:web:4f947250da877bb8f8f531"
   },
   colecao: "publio",
   get ativa() { return !!(this.firebase && this.firebase.projectId && this.firebase.apiKey); }
