@@ -79,6 +79,10 @@ você preencher — caso contrário vale o que foi lido da descrição.
 > Rode o trecho final do `SUPABASE.sql` uma vez no SQL Editor do Supabase: ele cria a
 > coluna `videos` e libera 50 MB no bucket.
 
+> **Antes de usar:** rode uma vez o `SUPABASE.sql` no SQL Editor do Supabase —
+> veja `COMO-ATUALIZAR-O-SUPABASE.md`. É o que cria a coluna dos vídeos e deixa todo
+> aparelho entrando como Cliente.
+
 ## Quem entra é cliente (e só vê as casas)
 
 Todo aparelho novo que abre o site entra **direto como Cliente**, sem pedir código e sem
