@@ -1,6 +1,6 @@
 /* ==========================================================
    Públio Imóveis — fichas de imóveis
-   Os imóveis ficam salvos numa nuvem compartilhada (JSONBin),
+   Os imóveis ficam salvos numa nuvem compartilhada (Firebase Firestore),
    então TODOS os dispositivos veem a mesma lista.
    Se a nuvem não estiver configurada, cai para o armazenamento
    local do navegador (IndexedDB), sem quebrar nada.
@@ -11,14 +11,22 @@ const DB_VERSAO = 1;
 const STORE = "imoveis";
 const STORE_META = "meta";
 
-/* ---- Configuração da nuvem (preencha para sincronizar) ----
-   Veja o arquivo COMO-ATIVAR-A-NUVEM.md.                              */
+/* ---- Configuração da nuvem (Firebase) ----
+   Preencha o bloco "firebase" abaixo com os dados do SEU projeto.
+   O passo a passo está em COMO-ATIVAR-A-NUVEM.md.                        */
 const NUVEM = {
-  binId: "",          // ex.: "65f1a2b3c4d5e6f7a8b9c0d1"
-  chave: "",          // sua X-Master-Key do JSONBin
-  get ativa() { return !!(this.binId && this.chave); }
+  firebase: {
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: ""
+  },
+  colecao: "publio",
+  get ativa() { return !!(this.firebase && this.firebase.projectId && this.firebase.apiKey); }
 };
-const NUVEM_URL = "https://api.jsonbin.io/v3/b/";
+const FS_URL = "https://firestore.googleapis.com/v1/projects/";
 
 let db = null;
 let imoveis = [];
@@ -81,33 +89,81 @@ function dbSubstituirTudo(lista) {
   });
 }
 
-/* ---------------- Nuvem compartilhada ---------------- */
-async function nuvemLer() {
-  if (!NUVEM.ativa) return null;
-  const r = await fetch(`${NUVEM_URL}${NUVEM.binId}/latest`, {
-    headers: { "X-Master-Key": NUVEM.chave, "X-Bin-Meta": "false" },
-    cache: "no-store"
-  });
-  if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
-  const dados = await r.json();
-  if (Array.isArray(dados)) return dados;
-  if (dados && Array.isArray(dados.imoveis)) return dados.imoveis;
-  return [];
+/* ---------------- Nuvem compartilhada (Firestore via REST) ---------------- */
+function docParaImovel(id, campos) {
+  const v = (nome, padrao = "") => (campos && campos[nome] ? (campos[nome].stringValue ?? padrao) : padrao);
+  const n = (nome) => (campos && campos[nome] ? Number(campos[nome].integerValue ?? campos[nome].doubleValue ?? 0) : 0);
+  return {
+    id,
+    titulo: v("titulo"),
+    tipo: v("tipo"),
+    finalidade: v("finalidade"),
+    preco: v("preco"),
+    local: v("local"),
+    descricao: v("descricao"),
+    imagem: v("imagem"),
+    criadoEm: n("criadoEm"),
+    atualizadoEm: n("atualizadoEm")
+  };
 }
 
-async function nuvemEscrever(lista) {
+function imovelParaDoc(im) {
+  const s = (x) => ({ stringValue: String(x == null ? "" : x) });
+  return {
+    fields: {
+      titulo: s(im.titulo),
+      tipo: s(im.tipo),
+      finalidade: s(im.finalidade),
+      preco: s(im.preco),
+      local: s(im.local),
+      descricao: s(im.descricao),
+      imagem: s(im.imagem),
+      criadoEm: { integerValue: String(im.criadoEm || Date.now()) },
+      atualizadoEm: { integerValue: String(im.atualizadoEm || Date.now()) }
+    }
+  };
+}
+
+function baseFS() {
+  return `${FS_URL}${NUVEM.firebase.projectId}/databases/(default)/documents/${NUVEM.colecao}`;
+}
+
+async function nuvemLer() {
+  if (!NUVEM.ativa) return null;
+  const r = await fetch(`${baseFS()}?pageSize=300&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
+  const dados = await r.json();
+  const docs = dados.documents || [];
+  return docs.map((d) => docParaImovel(d.name.split("/").pop(), d.fields));
+}
+
+async function nuvemSalvarUm(im) {
   if (!NUVEM.ativa) return false;
-  const r = await fetch(`${NUVEM_URL}${NUVEM.binId}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": NUVEM.chave,
-      "X-Bin-Versioning": "false"
-    },
-    body: JSON.stringify({ atualizadoEm: Date.now(), imoveis: lista || [] })
+  const r = await fetch(`${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(imovelParaDoc(im))
   });
   if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
   return true;
+}
+
+async function nuvemApagarUm(id) {
+  if (!NUVEM.ativa) return false;
+  const r = await fetch(`${baseFS()}/${encodeURIComponent(id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, {
+    method: "DELETE"
+  });
+  if (!r.ok && r.status !== 404) throw new Error(`nuvem respondeu ${r.status}`);
+  return true;
+}
+
+/* Envia vários imóveis de uma vez */
+async function nuvemEnviarLista(lista) {
+  let ok = true;
+  for (const im of lista || []) {
+    try { await nuvemSalvarUm(im); } catch (_) { ok = false; }
+  }
+  return ok;
 }
 
 /* Junta duas listas pelo id, ficando com a versão mais recente de cada imóvel */
@@ -132,10 +188,10 @@ async function sincronizar({ mostrarAviso = false } = {}) {
     const daNuvem = await nuvemLer();
     const locais = await dbTodos();
     const juntos = mesclar(daNuvem || [], locais);
-    // se a nuvem não tinha algo que existe aqui, devolve para a nuvem
-    if (juntos.length !== (daNuvem || []).length) {
-      await nuvemEscrever(juntos);
-    }
+    // se aqui existe algo que ainda não subiu, envia para a nuvem
+    const idsNuvem = new Set((daNuvem || []).map((x) => x.id));
+    const faltando = locais.filter((x) => !idsNuvem.has(x.id));
+    if (faltando.length) await nuvemEnviarLista(faltando);
     await dbSubstituirTudo(juntos);
     imoveis = juntos;
     nuvemOk = true;
@@ -151,15 +207,16 @@ async function sincronizar({ mostrarAviso = false } = {}) {
 }
 
 /* Salva na nuvem o estado atual e mantém a cópia local */
-async function publicar() {
+async function publicar(listaParaEnviar) {
   await dbSubstituirTudo(imoveis);
   if (!NUVEM.ativa) return { nuvem: false };
   try {
-    // pega o que estiver na nuvem para não apagar imóvel lançado em outro aparelho
+    // envia o que mudou
+    await nuvemEnviarLista(listaParaEnviar || imoveis);
+    // traz o que existir na nuvem e ainda não está aqui
     const remoto = await nuvemLer().catch(() => []);
     const juntos = mesclar(remoto || [], imoveis);
     imoveis = juntos;
-    await nuvemEscrever(juntos);
     await dbSubstituirTudo(juntos);
     nuvemOk = true;
     atualizarStatusNuvem();
@@ -384,7 +441,7 @@ async function salvarForm(ev) {
   const idx = imoveis.findIndex((x) => x.id === im.id);
   if (idx >= 0) imoveis[idx] = im; else imoveis.push(im);
 
-  const r = await publicar();
+  const r = await publicar([im]);
   renderLista();
   limparForm();
   if (r.nuvem) {
@@ -455,6 +512,7 @@ async function acaoLista(ev) {
     if (confirm(`Excluir "${im.titulo}"? A exclusão vale para todos os dispositivos.`)) {
       imoveis = imoveis.filter((x) => x.id !== id);
       await dbApagar(id);
+      if (NUVEM.ativa) { try { await nuvemApagarUm(id); } catch (_) {} }
       const r = await publicar();
       renderLista();
       if (location.hash.includes(id)) location.hash = "";
