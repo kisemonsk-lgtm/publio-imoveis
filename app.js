@@ -11,23 +11,21 @@ const DB_VERSAO = 1;
 const STORE = "imoveis";
 const STORE_META = "meta";
 
-/* ---- Configuração da nuvem (Firebase) ----
-   Preencha o bloco "firebase" abaixo com os dados do SEU projeto.
-   O passo a passo está em COMO-ATIVAR-A-NUVEM.md.                        */
-const NUVEM = {
-  firebase: {
-    apiKey: "AIzaSyCnOr5JEkRhZmqaov_uVib2GbJzfp7U-gk",
-    authDomain: "publio-imoveis-v1.firebaseapp.com",
-    projectId: "publio-imoveis-v1",
-    storageBucket: "publio-imoveis-v1.firebasestorage.app",
-    messagingSenderId: "917200805284",
-    appId: "1:917200805284:web:4f947250da877bb8f8f531"
-  },
-  colecao: "publio",
-  get ativa() { return !!(this.firebase && this.firebase.projectId && this.firebase.apiKey); },
-  fotosFora: true   // fotos vão para um servidor gratuito; o banco guarda só os endereços
+/* ---- Configuração da nuvem ----
+   SUPABASE: preencha "url" e "chave" (Project URL e anon/publishable key).
+   Enquanto estiverem vazios, o app usa o Firebase abaixo.                    */
+const SUPABASE = {
+  url: "",                       // ex.: https://abcdefgh.supabase.co
+  chave: "",                     // ex.: sb_publishable_... (ou a anon key)
+  tabela: "imoveis",
+  bucket: "fotos",               // bucket público das fotos
+  get ativa() { return !!(this.url && this.chave); }
 };
-const FS_URL = "https://firestore.googleapis.com/v1/projects/";
+
+const NUVEM = {
+  get ativa() { return SUPABASE.ativa; },
+  fotosFora: true   // fotos em servidor de arquivos; o banco guarda só os endereços
+};
 
 let db = null;
 let imoveis = [];
@@ -91,49 +89,6 @@ function dbSubstituirTudo(lista) {
   });
 }
 
-/* ---------------- Nuvem compartilhada (Firestore via REST) ---------------- */
-function docParaImovel(id, campos) {
-  const v = (nome, padrao = "") => (campos && campos[nome] ? (campos[nome].stringValue ?? padrao) : padrao);
-  const n = (nome) => (campos && campos[nome] ? Number(campos[nome].integerValue ?? campos[nome].doubleValue ?? 0) : 0);
-  const lista = (campos && campos.imagens && campos.imagens.arrayValue && campos.imagens.arrayValue.values)
-    ? campos.imagens.arrayValue.values.map((x) => x.stringValue || "").filter(Boolean)
-    : [];
-  const unica = v("imagem");
-  const imagens = lista.length ? lista : (unica ? [unica] : []);
-  return {
-    id,
-    titulo: v("titulo"),
-    tipo: v("tipo"),
-    finalidade: v("finalidade"),
-    preco: v("preco"),
-    local: v("local"),
-    descricao: v("descricao"),
-    imagem: imagens[0] || "",
-    imagens,
-    criadoEm: n("criadoEm"),
-    atualizadoEm: n("atualizadoEm")
-  };
-}
-
-function imovelParaDoc(im) {
-  const s = (x) => ({ stringValue: String(x == null ? "" : x) });
-  const fotos = imagensDe(im);
-  return {
-    fields: {
-      titulo: s(im.titulo),
-      tipo: s(im.tipo),
-      finalidade: s(im.finalidade),
-      preco: s(im.preco),
-      local: s(im.local),
-      descricao: s(im.descricao),
-      imagem: s(fotos[0] || ""),
-      imagens: { arrayValue: { values: fotos.map((f) => ({ stringValue: f })) } },
-      criadoEm: { integerValue: String(im.criadoEm || Date.now()) },
-      atualizadoEm: { integerValue: String(im.atualizadoEm || Date.now()) }
-    }
-  };
-}
-
 /* Lista de fotos de um imóvel, aceitando os registros antigos (só 1 imagem) */
 function imagensDe(im) {
   if (!im) return [];
@@ -141,23 +96,18 @@ function imagensDe(im) {
   return im.imagem ? [im.imagem] : [];
 }
 
-function baseFS() {
-  return `${FS_URL}${NUVEM.firebase.projectId}/databases/(default)/documents/${NUVEM.colecao}`;
+/* ---------------- Supabase (REST) ---------------- */
+function sbHeaders(extra = {}) {
+  return Object.assign({
+    "apikey": SUPABASE.chave,
+    "Authorization": "Bearer " + SUPABASE.chave,
+    "Content-Type": "application/json"
+  }, extra);
 }
-
-async function nuvemLer() {
-  if (!NUVEM.ativa) return null;
-  let r;
-  try {
-    r = await nuvemFetch(`${baseFS()}?pageSize=300&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { cache: "no-store" });
-  } catch (e) {
-    if (/respondeu 40[03]/.test(e.message)) r = await nuvemFetch(`${baseFS()}?pageSize=300`, { cache: "no-store" });
-    else throw e;
-  }
-  const dados = await r.json();
-  const docs = dados.documents || [];
-  return docs.map((d) => docParaImovel(d.name.split("/").pop(), d.fields));
+function sbUrl(caminho) {
+  return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho;
 }
+const CAMPOS_IMOVEL = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
 
 async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   let ultimo;
@@ -166,7 +116,6 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
       const r = await fetch(url, opcoes);
       if (r.ok) return r;
       ultimo = new Error("servidor respondeu " + r.status);
-      // 4xx: não adianta repetir
       if (r.status >= 400 && r.status < 500) break;
     } catch (e) {
       ultimo = new Error("falha de rede (" + (e.message || "conexão recusada") + ")");
@@ -174,6 +123,69 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
     await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
   }
   throw ultimo || new Error("falha desconhecida");
+}
+
+/* Lê todos os imóveis da nuvem */
+async function nuvemLer() {
+  if (!NUVEM.ativa) return null;
+  const r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_IMOVEL}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
+  const linhas = await r.json();
+  return (linhas || []).map((l) => ({
+    id: String(l.id),
+    titulo: l.titulo || "",
+    tipo: l.tipo || "",
+    finalidade: l.finalidade || "",
+    preco: l.preco || "",
+    local: l.local || "",
+    descricao: l.descricao || "",
+    imagem: l.imagem || "",
+    imagens: Array.isArray(l.imagens) ? l.imagens : (l.imagem ? [l.imagem] : []),
+    criadoEm: Number(l.criadoEm) || Date.now(),
+    atualizadoEm: Number(l.atualizadoEm) || Date.now()
+  }));
+}
+
+/* Grava um imóvel (cria ou atualiza) */
+async function nuvemSalvarUm(im) {
+  if (!NUVEM.ativa) return false;
+  const linha = {
+    id: im.id,
+    titulo: im.titulo || "",
+    tipo: im.tipo || "",
+    finalidade: im.finalidade || "",
+    preco: im.preco || "",
+    local: im.local || "",
+    descricao: im.descricao || "",
+    imagem: im.imagem || "",
+    imagens: imagensDe(im),
+    criadoEm: im.criadoEm || Date.now(),
+    atualizadoEm: im.atualizadoEm || Date.now()
+  };
+  await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), {
+    method: "POST",
+    headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify(linha)
+  });
+  return true;
+}
+
+/* Apaga um imóvel */
+async function nuvemApagarUm(id) {
+  if (!NUVEM.ativa) return false;
+  try {
+    await nuvemFetch(sbUrl(`${SUPABASE.tabela}?id=eq.${encodeURIComponent(id)}`), { method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" }) });
+  } catch (_) { /* já não existia */ }
+  return true;
+}
+
+/* Envia vários imóveis de uma vez */
+async function nuvemEnviarLista(lista) {
+  const falhas = [];
+  for (const im of lista || []) {
+    try { await nuvemSalvarUm(im); } catch (e) { falhas.push((im.titulo || im.id) + ": " + e.message); }
+  }
+  if (falhas.length) throw new Error(falhas[0]);
+  return true;
 }
 
 /* ---------- Fotos fora do banco (Catbox, grátis e sem conta) ----------
@@ -212,32 +224,6 @@ async function enviarFotosParaServidor(im) {
     novas.push(await enviarFotoParaServidor(foto));
   }
   return Object.assign({}, im, { imagem: novas[0] || "", imagens: novas });
-}
-
-async function nuvemSalvarUm(im) {
-  if (!NUVEM.ativa) return false;
-  const url = `${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
-  const enviar = (semChave) => nuvemFetch(semChave ? `${baseFS()}/${encodeURIComponent(im.id)}` : url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(imovelParaDoc(im))
-  });
-  try {
-    await enviar(false);
-  } catch (e) {
-    // se a chave foi recusada, tenta sem ela (as regras do banco já permitem o acesso)
-    if (/respondeu 40[03]/.test(e.message)) { await enviar(true); return true; }
-    throw e;
-  }
-  return true;
-}
-
-async function nuvemApagarUm(id) {
-  if (!NUVEM.ativa) return false;
-  try {
-    await nuvemFetch(`${baseFS()}/${encodeURIComponent(id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { method: "DELETE" });
-  } catch (_) { /* já não existia */ }
-  return true;
 }
 
 /* Envia vários imóveis de uma vez */
