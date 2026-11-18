@@ -275,6 +275,37 @@ async function nuvemEnviarLista(lista) {
   return true;
 }
 
+/* ---------- Lixeira da nuvem ----------
+   Quando alguém apaga um imóvel, o id dele fica registrado em
+   imoveis_apagados. Assim a exclusão chega a TODOS os aparelhos,
+   inclusive os que estavam desligados ou com a cópia local antiga. */
+async function nuvemLerApagados() {
+  if (!NUVEM.ativa) return [];
+  try {
+    const r = await nuvemFetch(sbUrl("imoveis_apagados?select=id&limit=1000"), { headers: sbHeaders(), cache: "no-store" });
+    const linhas = await r.json();
+    return (linhas || []).map((l) => String(l.id));
+  } catch (e) {
+    console.warn("Não consegui ler a lixeira:", e.message);
+    return [];
+  }
+}
+
+async function nuvemMarcarApagado(id) {
+  if (!NUVEM.ativa) return false;
+  try {
+    await nuvemFetch(sbUrl("imoveis_apagados?on_conflict=id"), {
+      method: "POST",
+      headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
+      body: JSON.stringify({ id: String(id), apagadoEm: Date.now() })
+    });
+    return true;
+  } catch (e) {
+    console.warn("Não consegui registrar a exclusão:", e.message);
+    return false;
+  }
+}
+
 /* Junta duas listas pelo id, ficando com a versão mais recente de cada imóvel */
 function mesclar(a, b) {
   const mapa = new Map();
@@ -296,10 +327,16 @@ async function sincronizar({ mostrarAviso = false } = {}) {
   try {
     const daNuvem = await nuvemLer();
     const locais = await dbTodos();
-    const juntos = mesclar(daNuvem || [], locais);
+    const apagados = await nuvemLerApagados();
+    const apagadosSet = new Set(apagados);
+    // o que foi apagado na nuvem sai daqui também (vale para todos os aparelhos)
+    const limparApagados = (lista) => (lista || []).filter((x) => !apagadosSet.has(x.id));
+    const daNuvemViva = limparApagados(daNuvem);
+    const locaisVivos = limparApagados(locais);
+    const juntos = mesclar(daNuvemViva, locaisVivos);
     // se aqui existe algo que ainda não subiu, envia para a nuvem
-    const idsNuvem = new Set((daNuvem || []).map((x) => x.id));
-    const faltando = locais.filter((x) => !idsNuvem.has(x.id));
+    const idsNuvem = new Set(daNuvemViva.map((x) => x.id));
+    const faltando = locaisVivos.filter((x) => !idsNuvem.has(x.id));
     if (faltando.length) await nuvemEnviarLista(faltando);
     await dbSubstituirTudo(juntos);
     imoveis = juntos;
@@ -740,15 +777,22 @@ async function acaoLista(ev) {
   } else if (btn.dataset.acao === "editar") {
     preencherForm(im);
   } else if (btn.dataset.acao === "apagar") {
-    const perms = await minhasPermissoes();
+    // no modo ADM a exclusão vale para todos os aparelhos (sempre liberada)
+    const perms = ehAdmin() ? { apagar: true } : await minhasPermissoes();
     if (!perms.apagar) {
       aviso($("#avisoForm"), "Este aparelho não tem permissão para apagar imóveis. Peça ao corretor para liberar em Área do corretor.", true);
       return;
     }
-    if (confirm(`Excluir "${im.titulo}"? A exclusão vale para todos os dispositivos.`)) {
+    const msg = ehAdmin()
+      ? `Excluir "${im.titulo}"?\n\nModo ADM: o imóvel será apagado de TODOS os aparelhos.`
+      : `Excluir "${im.titulo}"? A exclusão vale para todos os dispositivos.`;
+    if (confirm(msg)) {
       imoveis = imoveis.filter((x) => x.id !== id);
       await dbApagar(id);
-      if (NUVEM.ativa) { try { await nuvemApagarUm(id); } catch (_) {} }
+      if (NUVEM.ativa) {
+        await nuvemMarcarApagado(id);          // avisa todos os aparelhos
+        try { await nuvemApagarUm(id); } catch (_) {}
+      }
       const r = await publicar();
       renderLista();
       if (location.hash.includes(id)) location.hash = "";

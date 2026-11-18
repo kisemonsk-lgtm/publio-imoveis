@@ -83,3 +83,28 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.config_dispositivos to anon, authenticated;
 
 select 'tabela config_dispositivos criada' as resultado, count(*) as aparelhos from public.config_dispositivos;
+
+-- ============================================================
+--  Lixeira: exclusão feita no modo ADM vale para todos os aparelhos
+--  (rode este trecho também em um banco que já existia)
+-- ============================================================
+
+create table if not exists public.imoveis_apagados (
+  id      text primary key,
+  "apagadoEm" bigint default 0
+);
+
+alter table public.imoveis_apagados enable row level security;
+
+drop policy if exists "apagados le"     on public.imoveis_apagados;
+drop policy if exists "apagados grava"  on public.imoveis_apagados;
+drop policy if exists "apagados apaga"  on public.imoveis_apagados;
+
+create policy "apagados le"    on public.imoveis_apagados for select using (true);
+create policy "apagados grava" on public.imoveis_apagados for insert with check (true);
+create policy "apagados apaga" on public.imoveis_apagados for delete using (true);
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.imoveis_apagados to anon, authenticated;
+
+select 'tabela imoveis_apagados criada' as resultado, count(*) as apagados from public.imoveis_apagados;
