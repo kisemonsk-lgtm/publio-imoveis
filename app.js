@@ -33,7 +33,8 @@ let imoveis = [];
 let editandoId = null;
 let imagemAtual = [];      // fotos (base64) carregadas no formulário
 let filtro = "";
-let nuvemOk = null;        // null = ainda não testada, true/false = resultado
+let nuvemOk = null;
+let ultimoErroNuvem = "";        // null = ainda não testada, true/false = resultado
 let sincronizando = false;
 
 /* ---------------- IndexedDB (cópia local) ---------------- */
@@ -154,7 +155,8 @@ async function nuvemLer() {
 
 async function nuvemSalvarUm(im) {
   if (!NUVEM.ativa) return false;
-  const r = await fetch(`${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, {
+  const url = `${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
+  const r = await fetch(url, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(imovelParaDoc(im))
@@ -226,8 +228,13 @@ async function publicar(listaParaEnviar) {
   await dbSubstituirTudo(imoveis);
   if (!NUVEM.ativa) return { nuvem: false };
   try {
-    // envia o que mudou
-    await nuvemEnviarLista(listaParaEnviar || imoveis);
+    // envia o que mudou e confere se gravou de verdade
+    const lista = listaParaEnviar || imoveis;
+    await nuvemEnviarLista(lista);
+    const confirmados = await nuvemLer();
+    const idsConfirmados = new Set((confirmados || []).map((x) => x.id));
+    const naoSalvou = (lista || []).filter((x) => !idsConfirmados.has(x.id));
+    if (naoSalvou.length) throw new Error("o Firestore não confirmou o envio");
     // traz o que existir na nuvem e ainda não está aqui
     const remoto = await nuvemLer().catch(() => []);
     const juntos = mesclar(remoto || [], imoveis);
@@ -259,7 +266,8 @@ function atualizarStatusNuvem() {
   } else if (nuvemOk === false) {
     el.textContent = "Sem conexão com a nuvem";
     el.className = "status-nuvem erro";
-    el.title = "Confira sua internet ou a configuração da nuvem.";
+    el.title = ultimoErroNuvem ? ("Erro: " + ultimoErroNuvem) : "Confira sua internet ou a configuração da nuvem.";
+    if (ultimoErroNuvem) el.textContent = "Sem conexão com a nuvem: " + ultimoErroNuvem.slice(0, 40);
   } else {
     el.textContent = "Conectando...";
     el.className = "status-nuvem";
