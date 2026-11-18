@@ -1476,7 +1476,7 @@ function cargoDe(d) {
 
 function ehAdmin() { return sessao === true; }
 
-async function abrirAdmin() {
+async function abrirAdmin(modo) {
   mostrarTela("admin");
   const login = document.getElementById("adminLogin");
   const painel = document.getElementById("adminPainel");
@@ -1485,7 +1485,16 @@ async function abrirAdmin() {
   painel.hidden = !sessao;
   if (!sessao) {
     const u = document.getElementById("loginUsuario");
-    if (u) { u.value = usuarios.length === 1 ? usuarios[0].usuario : ""; setTimeout(() => document.getElementById("loginSenha").focus(), 60); }
+    if (u) {
+      u.value = modo === "desenvolvedor" ? DONO_USUARIO : (usuarios.length === 1 ? usuarios[0].usuario : "");
+      setTimeout(() => document.getElementById("loginSenha").focus(), 60);
+    }
+    const t = document.getElementById("loginTitulo");
+    if (t) t.textContent = modo === "desenvolvedor" ? "Área do desenvolvedor" : "Área do corretor";
+    const sub = document.getElementById("loginSub");
+    if (sub) sub.textContent = modo === "desenvolvedor"
+      ? "Entre com o usuário e a senha do dono."
+      : "Entre com seu usuário e senha.";
     aviso(document.getElementById("loginAviso"), "");
   } else {
     aplicarTelaPorCargo();
@@ -1669,8 +1678,12 @@ async function adicionarAparelhoPorCodigo() {
   const avisoEl = document.getElementById("dispAviso");
   const codigo = (campo ? campo.value : "").trim().toUpperCase();
   if (!codigo) { aviso(avisoEl, "Digite o código que aparece no outro aparelho.", true); return; }
-  const pedidos = lerJSON(CHAVE_PEDIDOS, {});
-  const pedido = pedidos[codigo];
+  let pedido = null;
+  try { pedido = await nuvemLerPedido(codigo); } catch (_) {}
+  if (!pedido) {
+    const locais = lerJSON(CHAVE_PEDIDOS, {});
+    pedido = locais[codigo] || null;
+  }
   if (!pedido) { aviso(avisoEl, "Código não encontrado. Confira se o outro aparelho abriu o site e mostrou o código.", true); return; }
   if (Date.now() - (pedido.criadoEm || 0) > CODIGO_VALIDADE) {
     aviso(avisoEl, "Esse código já venceu (vale 15 minutos). Peça para o outro aparelho gerar outro.", true);
@@ -1684,8 +1697,10 @@ async function adicionarAparelhoPorCodigo() {
   d.liberado = true; d.ver = def.ver; d.publicar = def.publicar; d.apagar = def.apagar;
   try {
     await gravarDispositivo(d);
-    delete pedidos[codigo];
-    gravarJSON(CHAVE_PEDIDOS, pedidos);
+    try { await nuvemApagarPedido(codigo); } catch (_) {}
+    const locais = lerJSON(CHAVE_PEDIDOS, {});
+    delete locais[codigo];
+    gravarJSON(CHAVE_PEDIDOS, locais);
     if (campo) campo.value = "";
     aviso(avisoEl, `Aparelho "${d.nome}" liberado como ${def.nome}.`);
     await carregarPainelAdmin();
@@ -1702,17 +1717,56 @@ function gerarCodigoPedido() {
   return c;
 }
 
-function garantirPedido() {
-  const pedidos = lerJSON(CHAVE_PEDIDOS, {});
-  let codigo = localStorage.getItem(CHAVE_PEDIDOS + "-meu") || "";
-  const p = pedidos[codigo];
-  if (!codigo || !p || Date.now() - (p.criadoEm || 0) > CODIGO_VALIDADE) {
+async function garantirPedido() {
+  let codigo = "";
+  try { codigo = localStorage.getItem(CHAVE_PEDIDOS + "-meu") || ""; } catch (_) {}
+
+  // já tenho um código válido na nuvem? reaproveita
+  if (codigo) {
+    try {
+      const meu = await nuvemLerPedido(codigo);
+      if (meu && meu.id === aparelhoId && Date.now() - (meu.criadoEm || 0) < CODIGO_VALIDADE) return codigo;
+    } catch (_) {}
+  }
+
+  // cria um novo e grava na nuvem (é isso que faz o outro aparelho achar)
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
     codigo = gerarCodigoPedido();
-    pedidos[codigo] = { id: aparelhoId, nome: aparelhoNome, criadoEm: Date.now() };
-    gravarJSON(CHAVE_PEDIDOS, pedidos);
-    try { localStorage.setItem(CHAVE_PEDIDOS + "-meu", codigo); } catch (_) {}
+    try {
+      await nuvemGravarPedido(codigo, { id: aparelhoId, nome: aparelhoNome, criadoEm: Date.now() });
+      try { localStorage.setItem(CHAVE_PEDIDOS + "-meu", codigo); } catch (_) {}
+      return codigo;
+    } catch (e) {
+      if (!/duplicate|23505|conflit/i.test(e.message)) throw e;
+    }
   }
   return codigo;
+}
+
+/* ---- pedidos de acesso na nuvem ---- */
+async function nuvemGravarPedido(codigo, dados) {
+  if (!NUVEM.ativa) return false;
+  await nuvemFetch(sbUrl("pedidos_acesso?on_conflict=codigo"), {
+    method: "POST",
+    headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify({ codigo, aparelhoId: dados.id, nome: dados.nome, criadoEm: dados.criadoEm })
+  });
+  return true;
+}
+
+async function nuvemLerPedido(codigo) {
+  if (!NUVEM.ativa) return null;
+  const r = await nuvemFetch(sbUrl("pedidos_acesso?select=codigo,aparelhoId,nome,criadoEm&codigo=eq." + encodeURIComponent(codigo)));
+  const linha = (r && r[0]) || null;
+  return linha ? { codigo: linha.codigo, id: linha.aparelhoId, nome: linha.nome, criadoEm: Number(linha.criadoEm) || 0 } : null;
+}
+
+async function nuvemApagarPedido(codigo) {
+  if (!NUVEM.ativa) return false;
+  await nuvemFetch(sbUrl("pedidos_acesso?codigo=eq." + encodeURIComponent(codigo)), {
+    method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" })
+  });
+  return true;
 }
 
 async function mostrarPedidoSePreciso() {
@@ -1721,7 +1775,12 @@ async function mostrarPedidoSePreciso() {
   const perms = await minhasPermissoes();
   const pendente = !sessao && (perms.bloqueado || !perms.publicar && !perms.apagar);
   if (!pendente || location.hash) { caixa.hidden = true; return; }
-  const codigo = garantirPedido();
+  let codigo = "------";
+  try { codigo = await garantirPedido(); }
+  catch (e) {
+    const av = document.getElementById("avisoPedido");
+    if (av) aviso(av, "Não consegui gerar o código agora: " + e.message, true);
+  }
   document.getElementById("codigoMeuAparelho").textContent = codigo;
   caixa.hidden = false;
 }
@@ -1908,6 +1967,10 @@ function ligarAdmin() {
   if (bSair) bSair.addEventListener("click", sairAdmin);
   const bIr = document.getElementById("btnIrPainel");
   if (bIr) bIr.addEventListener("click", () => mostrarTela("painel"));
+  const bDev = document.getElementById("btnDesenvolvedor");
+  if (bDev) bDev.addEventListener("click", () => {
+    abrirAdmin("desenvolvedor");
+  });
   const bSenha = document.getElementById("btnSalvarSenha");
   if (bSenha) bSenha.addEventListener("click", salvarCredenciais);
   const bNovoU = document.getElementById("btnNovoUsuario");

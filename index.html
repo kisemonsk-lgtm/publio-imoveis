@@ -26,6 +26,7 @@
     <button id="btnNovo" class="btn btn-primario">+ Novo imóvel</button>
     <button id="btnAtualizar" class="btn btn-neutro btn-mini" title="Buscar imóveis lançados em outros aparelhos">↻ Atualizar</button>
     <button id="btnAdmin" class="btn btn-neutro btn-mini" title="Somente o dono: dispositivos e permissões">🔒 Área do corretor</button>
+    <button id="btnDesenvolvedor" class="btn btn-neutro btn-mini" title="Acesso do dono (usuário e senha)">⚙️ Área do desenvolvedor</button>
   </div>
 </header>
 
@@ -122,8 +123,8 @@
 
     <!-- login -->
     <div id="adminLogin" class="cartao cartao-login">
-      <h2>Área do corretor</h2>
-      <p class="admin-sub">Entre com seu usuário e senha para liberar aparelhos e permissões.</p>
+      <h2 id="loginTitulo">Área do corretor</h2>
+      <p class="admin-sub" id="loginSub">Entre com seu usuário e senha para liberar aparelhos e permissões.</p>
       <label class="campo">
         <span>Usuário</span>
         <input id="loginUsuario" type="text" autocomplete="username" placeholder="seu usuário" />

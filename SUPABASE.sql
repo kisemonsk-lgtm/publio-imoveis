@@ -118,3 +118,19 @@ alter table public.config_dispositivos add column if not exists liberado boolean
 
 -- quem já estava na lista continua com o que tinha; libere os novos pela Área do corretor
 update public.config_dispositivos set liberado = true where liberado is null;
+
+-- ===== Pedidos de acesso (código gerado pelo aparelho novo, lido pelo corretor) =====
+create table if not exists public.pedidos_acesso (
+  codigo text primary key,
+  "aparelhoId" text,
+  nome text,
+  "criadoEm" bigint default 0
+);
+alter table public.pedidos_acesso enable row level security;
+drop policy if exists "pedidos le"     on public.pedidos_acesso;
+drop policy if exists "pedidos grava"  on public.pedidos_acesso;
+drop policy if exists "pedidos apaga"  on public.pedidos_acesso;
+create policy "pedidos le"    on public.pedidos_acesso for select using (true);
+create policy "pedidos grava" on public.pedidos_acesso for insert with check (true);
+create policy "pedidos apaga" on public.pedidos_acesso for delete using (true);
+grant select, insert, delete on public.pedidos_acesso to anon, authenticated;
