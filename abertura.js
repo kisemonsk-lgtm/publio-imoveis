@@ -1,21 +1,20 @@
 /* ==========================================================
-   TELA INICIAL — a porta que se abre no meio
+   TELA INICIAL — a porta se abre quando a pessoa clica em Entrar
    ----------------------------------------------------------
-   Duas folhas escuras com filete dourado cobrem a tela e se
-   abrem para os lados, revelando a logo, o nome e o botão
-   Entrar. Clicou em Entrar, a abertura sai de cena de vez e o
-   site fica livre (não há segunda etapa, nada de prender).
+   A tela abre simples: logo, nome e botão Entrar.
+   Clicou em Entrar: duas folhas escuras com filete dourado descem
+   e fecham a tela pela linha do meio e, logo em seguida, essa
+   porta se abre para os lados — o meio se abre e o site aparece.
    Roda no painel do corretor (index.html) e na Públio Cliente
    (publio-cliente.html).
-   Quem abre um link de imóvel vai direto para a ficha, sem
-   passar pela abertura.
+   Quem abre um link de imóvel vai direto para a ficha.
    ========================================================== */
 (function () {
   "use strict";
 
-  var CHAVE = "publio-abertura-v4";     // "1" = já entrou nesta sessão
+  var CHAVE = "publio-abertura-v5";     // "1" = já entrou nesta sessão
   var el = null;
-  var saindo = false;
+  var indo = false;
 
   function temLinkDeFicha() {
     var h = location.hash || "";
@@ -51,12 +50,13 @@
     }
   }
 
-  /* mostra a abertura; as portas se abrem sozinhas */
+  /* abertura simples: logo, nome e o botão Entrar */
   function mostrar() {
     el = document.getElementById("abertura");
     if (!el) return;
     semearPo();
     el.hidden = false;
+    el.classList.remove("abrindo", "aberta");
     document.body.classList.add("abertura-ativa");
     window.scrollTo({ top: 0 });
 
@@ -76,14 +76,13 @@
     }
   }
 
-  /* sai da frente de vez: esconde, libera a rolagem e não volta */
   function sairDeCena() {
     document.removeEventListener("keydown", teclado);
     document.body.classList.remove("abertura-ativa");
     if (el) {
       el.hidden = true;
       el.style.display = "none";
-      el.classList.remove("saindo");
+      el.classList.remove("abrindo", "aberta");
     }
     el = null;
 
@@ -95,15 +94,26 @@
     }
   }
 
+  /* clique em Entrar: a porta fecha a tela no meio e depois se abre */
   function entrar() {
-    if (!el || saindo) return;
-    saindo = true;
+    if (!el || indo) return;
+    indo = true;
     marcarEntrou();
+    document.body.classList.remove("abertura-ativa");
 
     if (reduzido()) { sairDeCena(); return; }
 
-    el.classList.add("saindo");
-    setTimeout(sairDeCena, 400);
+    // 1) as folhas descem e fecham a tela (0,42 s)
+    el.classList.add("abrindo");
+
+    // 2) a porta fechada se abre para os lados (0,9 s) e o site aparece
+    setTimeout(function () {
+      if (!el) return;
+      el.classList.remove("abrindo");
+      el.classList.add("aberta");
+    }, 450);
+
+    setTimeout(sairDeCena, 1400);
   }
 
   /* se alguém abrir um link de ficha com a abertura na tela, sai da frente */
