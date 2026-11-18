@@ -982,11 +982,14 @@ async function iniciar() {
     $("#ficha").appendChild(rod);
   }
 
-  window.addEventListener("hashchange", rotear);
+  window.addEventListener("hashchange", () => { try { rotear(); } catch (e) { console.error(e); } });
 
-  // primeira carga: já busca a lista compartilhada
-  await sincronizar();
-  await rotear();
+  // primeira carga: mostra o painel imediatamente e busca a lista em seguida
+  mostrarTela("painel");
+  renderLista();
+  try { await rotear(); } catch (e) { console.error(e); mostrarTela("painel"); }
+  try { await sincronizar(); } catch (e) { console.error(e); }
+  try { await rotear(); } catch (e) { console.error(e); }
 
   // mantém a lista atualizada entre os aparelhos
   if (NUVEM.ativa) {
@@ -1003,4 +1006,19 @@ async function iniciar() {
   }
 }
 
-iniciar();
+/* A tela nunca fica em branco: se algo demorar, mostra o que já existe no aparelho */
+function mostrarTela(destino) {
+  const painel = document.getElementById("painel");
+  const ficha = document.getElementById("ficha");
+  if (!painel || !ficha) return;
+  if (destino === "ficha") { painel.hidden = true; ficha.hidden = false; }
+  else { ficha.hidden = true; painel.hidden = false; }
+}
+
+iniciar().catch((e) => {
+  console.error("Falha ao iniciar:", e);
+  mostrarTela("painel");
+  const s = document.getElementById("statusNuvem");
+  if (s) { s.textContent = "Não consegui carregar — recarregue a página"; s.className = "status-nuvem erro"; }
+  if (typeof renderLista === "function") { try { renderLista(); } catch (_) {} }
+});
