@@ -146,7 +146,13 @@ function baseFS() {
 
 async function nuvemLer() {
   if (!NUVEM.ativa) return null;
-  const r = await nuvemFetch(`${baseFS()}?pageSize=300&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { cache: "no-store" });
+  let r;
+  try {
+    r = await nuvemFetch(`${baseFS()}?pageSize=300&key=${encodeURIComponent(NUVEM.firebase.apiKey)}`, { cache: "no-store" });
+  } catch (e) {
+    if (/respondeu 40[03]/.test(e.message)) r = await nuvemFetch(`${baseFS()}?pageSize=300`, { cache: "no-store" });
+    else throw e;
+  }
   const dados = await r.json();
   const docs = dados.documents || [];
   return docs.map((d) => docParaImovel(d.name.split("/").pop(), d.fields));
@@ -171,14 +177,19 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
 
 async function nuvemSalvarUm(im) {
   if (!NUVEM.ativa) return false;
-  const params = new URLSearchParams();
-  if (NUVEM.firebase.apiKey) params.set("key", NUVEM.firebase.apiKey);
-  const url = `${baseFS()}/${encodeURIComponent(im.id)}${params.toString() ? "?" + params.toString() : ""}`;
-  await nuvemFetch(url, {
+  const url = `${baseFS()}/${encodeURIComponent(im.id)}?key=${encodeURIComponent(NUVEM.firebase.apiKey)}`;
+  const enviar = (semChave) => nuvemFetch(semChave ? `${baseFS()}/${encodeURIComponent(im.id)}` : url, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(imovelParaDoc(im))
   });
+  try {
+    await enviar(false);
+  } catch (e) {
+    // se a chave foi recusada, tenta sem ela (as regras do banco já permitem o acesso)
+    if (/respondeu 40[03]/.test(e.message)) { await enviar(true); return true; }
+    throw e;
+  }
   return true;
 }
 
@@ -243,27 +254,53 @@ async function sincronizar({ mostrarAviso = false } = {}) {
 async function publicar(listaParaEnviar) {
   await dbSubstituirTudo(imoveis);
   if (!NUVEM.ativa) return { nuvem: false };
+
+  const lista = listaParaEnviar || imoveis;
+  let erroEnvio = "";
+
+  // 1) envia o que mudou
   try {
-    // envia o que mudou e confere se gravou de verdade
-    const lista = listaParaEnviar || imoveis;
     await nuvemEnviarLista(lista);
-    const confirmados = await nuvemLer();
-    const idsConfirmados = new Set((confirmados || []).map((x) => x.id));
-    const naoSalvou = (lista || []).filter((x) => !idsConfirmados.has(x.id));
-    if (naoSalvou.length) throw new Error("o Firestore não confirmou o envio");
-    // traz o que existir na nuvem e ainda não está aqui
-    const remoto = await nuvemLer().catch(() => []);
-    const juntos = mesclar(remoto || [], imoveis);
-    imoveis = juntos;
-    await dbSubstituirTudo(juntos);
-    nuvemOk = true;
-    atualizarStatusNuvem();
-    return { nuvem: true };
   } catch (e) {
-    nuvemOk = false;
-    atualizarStatusNuvem();
-    return { nuvem: false, erro: e.message };
+    erroEnvio = e.message;
   }
+
+  // 2) confirma no banco se cada imóvel ficou gravado (o Firestore pode demorar a mostrar)
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    try {
+      const confirmados = (await nuvemLer()) || [];
+      const ids = new Set(confirmados.map((x) => x.id));
+      const faltando = (lista || []).filter((x) => !ids.has(x.id));
+      if (!faltando.length) {
+        nuvemOk = true;
+        ultimoErroNuvem = "";
+        atualizarStatusNuvem();
+        return { nuvem: true };
+      }
+      // ainda não apareceu: tenta reenviar só o que falta (uma vez)
+      if (tentativa === 1) { try { await nuvemEnviarLista(faltando); } catch (e) { erroEnvio = e.message; } }
+      erroEnvio = erroEnvio || "o banco ainda não confirmou o envio";
+    } catch (e) {
+      erroEnvio = e.message;
+    }
+    await new Promise((ok) => setTimeout(ok, 700 * (tentativa + 1)));
+  }
+
+  nuvemOk = false;
+  ultimoErroNuvem = erroEnvio || "o banco não confirmou o envio";
+  atualizarStatusNuvem();
+  return { nuvem: false, erro: lastErroLegivel(ultimoErroNuvem) };
+}
+
+/* Traduz o erro para algo que a pessoa entenda e possa resolver */
+function lastErroLegivel(msg) {
+  const t = String(msg || "");
+  if (/respondeu 400/.test(t)) return "as fotos ficaram grandes demais. Remova uma foto e salve de novo.";
+  if (/respondeu 403/.test(t)) return "o banco está bloqueando este navegador. Verifique as regras do Firestore, o bloqueador de anúncios ou o antivírus.";
+  if (/respondeu 404/.test(t)) return "o projeto do Firebase não foi encontrado.";
+  if (/respondeu 5\d\d/.test(t)) return "o servidor do Firebase está instável. Tente de novo em alguns segundos.";
+  if (/rede|Failed to fetch|conexão/i.test(t)) return "sem conexão com a internet ou o acesso ao Firebase está bloqueado neste navegador.";
+  return t || "não confirmou o envio";
 }
 
 function atualizarStatusNuvem() {
