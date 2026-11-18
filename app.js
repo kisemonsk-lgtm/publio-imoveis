@@ -1,8 +1,9 @@
 /* ==========================================================
-   Corretora — fichas de imóveis
-   Guarda os imóveis no IndexedDB do próprio navegador.
-   A imagem fica em base64 e vai no link, então o cliente
-   consegue baixar a foto sem precisar de servidor.
+   Públio Imóveis — fichas de imóveis
+   Os imóveis ficam salvos numa nuvem compartilhada (JSONBin),
+   então TODOS os dispositivos veem a mesma lista.
+   Se a nuvem não estiver configurada, cai para o armazenamento
+   local do navegador (IndexedDB), sem quebrar nada.
    ========================================================== */
 
 const DB_NOME = "corretora-db";
@@ -10,13 +11,24 @@ const DB_VERSAO = 1;
 const STORE = "imoveis";
 const STORE_META = "meta";
 
+/* ---- Configuração da nuvem (preencha para sincronizar) ----
+   Veja o arquivo COMO-ATIVAR-A-NUVEM.md.                              */
+const NUVEM = {
+  binId: "",          // ex.: "65f1a2b3c4d5e6f7a8b9c0d1"
+  chave: "",          // sua X-Master-Key do JSONBin
+  get ativa() { return !!(this.binId && this.chave); }
+};
+const NUVEM_URL = "https://api.jsonbin.io/v3/b/";
+
 let db = null;
 let imoveis = [];
 let editandoId = null;
 let imagemAtual = "";      // base64 da imagem carregada no formulário
 let filtro = "";
+let nuvemOk = null;        // null = ainda não testada, true/false = resultado
+let sincronizando = false;
 
-/* ---------------- IndexedDB ---------------- */
+/* ---------------- IndexedDB (cópia local) ---------------- */
 function abrirDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NOME, DB_VERSAO);
@@ -58,6 +70,130 @@ function dbApagar(id) {
   });
 }
 
+function dbSubstituirTudo(lista) {
+  return new Promise((resolve, reject) => {
+    const t = db.transaction(STORE, "readwrite");
+    const s = t.objectStore(STORE);
+    s.clear();
+    (lista || []).forEach((im) => s.put(im));
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+  });
+}
+
+/* ---------------- Nuvem compartilhada ---------------- */
+async function nuvemLer() {
+  if (!NUVEM.ativa) return null;
+  const r = await fetch(`${NUVEM_URL}${NUVEM.binId}/latest`, {
+    headers: { "X-Master-Key": NUVEM.chave, "X-Bin-Meta": "false" },
+    cache: "no-store"
+  });
+  if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
+  const dados = await r.json();
+  if (Array.isArray(dados)) return dados;
+  if (dados && Array.isArray(dados.imoveis)) return dados.imoveis;
+  return [];
+}
+
+async function nuvemEscrever(lista) {
+  if (!NUVEM.ativa) return false;
+  const r = await fetch(`${NUVEM_URL}${NUVEM.binId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Master-Key": NUVEM.chave,
+      "X-Bin-Versioning": "false"
+    },
+    body: JSON.stringify({ atualizadoEm: Date.now(), imoveis: lista || [] })
+  });
+  if (!r.ok) throw new Error(`nuvem respondeu ${r.status}`);
+  return true;
+}
+
+/* Junta duas listas pelo id, ficando com a versão mais recente de cada imóvel */
+function mesclar(a, b) {
+  const mapa = new Map();
+  [...(a || []), ...(b || [])].forEach((im) => {
+    if (!im || !im.id) return;
+    const atual = mapa.get(im.id);
+    const t = im.atualizadoEm || im.criadoEm || 0;
+    const tAtual = atual ? (atual.atualizadoEm || atual.criadoEm || 0) : -1;
+    if (!atual || t >= tAtual) mapa.set(im.id, im);
+  });
+  return [...mapa.values()];
+}
+
+/* Lê a nuvem (se ativa) e atualiza a lista na tela */
+async function sincronizar({ mostrarAviso = false } = {}) {
+  if (sincronizando) return;
+  if (!NUVEM.ativa) { nuvemOk = false; atualizarStatusNuvem(); return; }
+  sincronizando = true;
+  try {
+    const daNuvem = await nuvemLer();
+    const locais = await dbTodos();
+    const juntos = mesclar(daNuvem || [], locais);
+    // se a nuvem não tinha algo que existe aqui, devolve para a nuvem
+    if (juntos.length !== (daNuvem || []).length) {
+      await nuvemEscrever(juntos);
+    }
+    await dbSubstituirTudo(juntos);
+    imoveis = juntos;
+    nuvemOk = true;
+    renderLista();
+    if (mostrarAviso) aviso($("#avisoForm"), "Lista atualizada com os outros dispositivos.");
+  } catch (e) {
+    nuvemOk = false;
+    if (mostrarAviso) aviso($("#avisoForm"), "Não consegui falar com a nuvem: " + e.message, true);
+  } finally {
+    sincronizando = false;
+    atualizarStatusNuvem();
+  }
+}
+
+/* Salva na nuvem o estado atual e mantém a cópia local */
+async function publicar() {
+  await dbSubstituirTudo(imoveis);
+  if (!NUVEM.ativa) return { nuvem: false };
+  try {
+    // pega o que estiver na nuvem para não apagar imóvel lançado em outro aparelho
+    const remoto = await nuvemLer().catch(() => []);
+    const juntos = mesclar(remoto || [], imoveis);
+    imoveis = juntos;
+    await nuvemEscrever(juntos);
+    await dbSubstituirTudo(juntos);
+    nuvemOk = true;
+    atualizarStatusNuvem();
+    return { nuvem: true };
+  } catch (e) {
+    nuvemOk = false;
+    atualizarStatusNuvem();
+    return { nuvem: false, erro: e.message };
+  }
+}
+
+function atualizarStatusNuvem() {
+  const el = document.getElementById("statusNuvem");
+  if (!el) return;
+  if (!NUVEM.ativa) {
+    el.textContent = "Modo local — só neste aparelho";
+    el.className = "status-nuvem local";
+    el.title = "Para todos os dispositivos verem os mesmos imóveis, ative a nuvem (veja COMO-ATIVAR-A-NUVEM.md).";
+    return;
+  }
+  if (nuvemOk === true) {
+    el.textContent = "Sincronizado — todos os dispositivos";
+    el.className = "status-nuvem ok";
+    el.title = "Os imóveis são compartilhados entre todos os aparelhos.";
+  } else if (nuvemOk === false) {
+    el.textContent = "Sem conexão com a nuvem";
+    el.className = "status-nuvem erro";
+    el.title = "Confira sua internet ou a configuração da nuvem.";
+  } else {
+    el.textContent = "Conectando...";
+    el.className = "status-nuvem";
+  }
+}
+
 /* ---------------- Utilidades ---------------- */
 const $ = (sel) => document.querySelector(sel);
 
@@ -67,7 +203,7 @@ function aviso(el, texto, erro = false) {
   el.classList.toggle("erro", !!erro);
   if (texto) {
     clearTimeout(el._t);
-    el._t = setTimeout(() => { el.hidden = true; }, 4000);
+    el._t = setTimeout(() => { el.hidden = true; }, 4500);
   }
 }
 
@@ -83,7 +219,7 @@ function fmtPreco(valor) {
   return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-/* Reduz a imagem para no máximo 1400px e JPEG, para o link não ficar gigante */
+/* Reduz a imagem para no máximo 1400px e JPEG, para não pesar no compartilhamento */
 function comprimirImagem(file, maxLado = 1400, qualidade = 0.82) {
   return new Promise((resolve, reject) => {
     const leitor = new FileReader();
@@ -177,12 +313,15 @@ function decodificar(str) {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
+/* Link curto: aponta para o imóvel na lista compartilhada (precisa da nuvem).
+   Sem nuvem, o link carrega tudo dentro dele, como antes. */
 function linkDaFicha(im) {
+  const base = location.href.split("#")[0].split("?")[0];
+  if (NUVEM.ativa) return base + "#ver/" + im.id;
   const dados = codificar({
     t: im.titulo, ti: im.tipo, f: im.finalidade, p: im.preco,
     l: im.local, d: im.descricao, i: im.imagem
   });
-  const base = location.href.split("#")[0].split("?")[0];
   return base + "#imovel=" + dados;
 }
 
@@ -227,6 +366,7 @@ async function salvarForm(ev) {
     return;
   }
 
+  const anterior = editandoId ? imoveis.find((x) => x.id === editandoId) : null;
   const im = {
     id: editandoId || novoId(),
     titulo,
@@ -236,18 +376,24 @@ async function salvarForm(ev) {
     local: $("#f-local").value.trim(),
     descricao: $("#f-descricao").value.trim(),
     imagem: imagemAtual,
-    criadoEm: editandoId ? (imoveis.find((x) => x.id === editandoId)?.criadoEm || Date.now()) : Date.now()
+    criadoEm: anterior ? (anterior.criadoEm || Date.now()) : Date.now(),
+    atualizadoEm: Date.now()
   };
 
-  try {
-    await dbSalvar(im);
-  } catch (e) {
-    aviso($("#avisoForm"), "Não consegui salvar: " + e.message, true);
-    return;
-  }
-  await carregarLista();
+  // atualiza a lista em memória
+  const idx = imoveis.findIndex((x) => x.id === im.id);
+  if (idx >= 0) imoveis[idx] = im; else imoveis.push(im);
+
+  const r = await publicar();
+  renderLista();
   limparForm();
-  aviso($("#avisoForm"), "Imóvel salvo. Abra a ficha para enviar ao cliente.");
+  if (r.nuvem) {
+    aviso($("#avisoForm"), "Imóvel salvo e enviado para todos os dispositivos.");
+  } else if (r.erro) {
+    aviso($("#avisoForm"), "Salvo neste aparelho, mas a nuvem falhou: " + r.erro, true);
+  } else {
+    aviso($("#avisoForm"), "Imóvel salvo neste aparelho. Ative a nuvem para os outros verem.");
+  }
 }
 
 /* ---------------- Lista ---------------- */
@@ -306,10 +452,13 @@ async function acaoLista(ev) {
   } else if (btn.dataset.acao === "editar") {
     preencherForm(im);
   } else if (btn.dataset.acao === "apagar") {
-    if (confirm(`Excluir "${im.titulo}"?`)) {
+    if (confirm(`Excluir "${im.titulo}"? A exclusão vale para todos os dispositivos.`)) {
+      imoveis = imoveis.filter((x) => x.id !== id);
       await dbApagar(id);
-      await carregarLista();
+      const r = await publicar();
+      renderLista();
       if (location.hash.includes(id)) location.hash = "";
+      if (r.erro) aviso($("#avisoForm"), "Excluído aqui, mas a nuvem falhou: " + r.erro, true);
     }
   }
 }
@@ -356,7 +505,7 @@ function abrirFicha(im, somenteLeitura) {
 }
 
 function voltarPainel() {
-  if (location.hash.startsWith("#ficha/") || location.hash.startsWith("#imovel=")) {
+  if (location.hash) {
     location.hash = "";
   } else {
     $("#ficha").hidden = true;
@@ -376,7 +525,6 @@ async function copiarTudo() {
   const im = $("#ficha")._imovel;
   if (!im) return;
 
-  // 1) imagem na área de transferência, quando o navegador permite
   let imagemOk = false;
   if (im.imagem && navigator.clipboard && window.ClipboardItem) {
     try {
@@ -387,7 +535,6 @@ async function copiarTudo() {
     } catch (_) { imagemOk = false; }
   }
 
-  // 2) descrição como texto
   const textoOk = await copiarTexto(textoDoImovel(im));
 
   if (imagemOk && textoOk) {
@@ -421,8 +568,22 @@ function blobParaPng(blob) {
 async function rotear() {
   const h = location.hash || "";
 
+  // link curto: imóvel na lista compartilhada
+  if (h.startsWith("#ver/")) {
+    const id = h.slice(5);
+    let im = imoveis.find((x) => x.id === id);
+    if (!im) {
+      await sincronizar();
+      im = imoveis.find((x) => x.id === id);
+    }
+    if (im) { abrirFicha(im, true); return; }
+    alert("Imóvel não encontrado. O link pode ter sido removido.");
+    location.hash = "";
+    return;
+  }
+
+  // link antigo, com os dados dentro dele
   if (h.startsWith("#imovel=")) {
-    // ficha aberta pelo cliente, com os dados dentro do próprio link
     try {
       const d = decodificar(h.slice(8));
       abrirFicha({
@@ -492,6 +653,11 @@ async function iniciar() {
     else { $("#linkFicha").select(); aviso($("#avisoFicha"), "Selecione o link e use Ctrl+C.", true); }
   });
 
+  const btnAtualizar = document.getElementById("btnAtualizar");
+  if (btnAtualizar) {
+    btnAtualizar.addEventListener("click", () => sincronizar({ mostrarAviso: true }));
+  }
+
   // No celular, compartilhar direto também ajuda
   if (navigator.share) {
     const b = document.createElement("button");
@@ -514,7 +680,24 @@ async function iniciar() {
   }
 
   window.addEventListener("hashchange", rotear);
+
+  // primeira carga: já busca a lista compartilhada
+  await sincronizar();
   await rotear();
+
+  // mantém a lista atualizada entre os aparelhos
+  if (NUVEM.ativa) {
+    setInterval(() => {
+      if (document.hidden) return;
+      if (location.hash.startsWith("#ficha/") || location.hash.startsWith("#ver/")) return;
+      sincronizar();
+    }, 30000);
+
+    // ao voltar para a aba, busca novidades na hora
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && !location.hash) sincronizar();
+    });
+  }
 }
 
 iniciar();
