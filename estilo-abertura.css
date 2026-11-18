@@ -25,7 +25,8 @@ body.abertura-ativa { overflow: hidden; }
 .abertura[hidden] { display: none; }
 
 /* fecha com estilo quando o corretor clica em Entrar */
-.abertura.saindo { animation: abrirSaida .55s cubic-bezier(.4, 0, .2, 1) both; pointer-events: none; }
+/* ao entrar: a abertura some por completo (o JS tira do DOM) */
+.abertura.saindo { pointer-events: none; }
 
 /* brilho que respira atrás da logo */
 .abertura::before {
@@ -143,36 +144,6 @@ body.abertura-ativa { overflow: hidden; }
   100% { opacity: 1; transform: scale(1); filter: blur(0); }
 }
 
-
-/* ---------------- portas se fechando sobre o site (saindo -> fechando) ---------------- */
-/* ao entrar, o conteúdo já sai de cena antes das portas */
-.abertura.saindo .abertura-conteudo { animation: painelSai .45s ease both; }
-.abertura.saindo .abertura-porta::before { animation: portaFechaEsq .75s cubic-bezier(.7, 0, .3, 1) both; }
-.abertura.saindo .abertura-porta::after  { animation: portaFechaDir .75s cubic-bezier(.7, 0, .3, 1) both; }
-
-/* ao clicar em Abrir de novo, as portas abrem uma vez mais */
-.abertura.fechando .abertura-porta::before { animation: portaEsq .95s cubic-bezier(.7, 0, .3, 1) both; }
-.abertura.fechando .abertura-porta::after  { animation: portaDir .95s cubic-bezier(.7, 0, .3, 1) both; }
-.abertura.fechando .abertura-conteudo { animation: painelSurge .8s cubic-bezier(.22, .61, .36, 1) both .25s; }
-.abertura.fechando .abertura-linha { opacity: 1; animation: none; }
-
-/* conteúdo escondido atrás das portas fechadas */
-.abertura-porta-painel.painel-fechado { opacity: 0; pointer-events: none; }
-
-@keyframes portaFechaEsq {
-  0%   { transform: perspective(1200px) rotateY(-104deg); opacity: 0; }
-  20%  { opacity: 1; }
-  100% { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
-}
-@keyframes portaFechaDir {
-  0%   { transform: perspective(1200px) rotateY(104deg); opacity: 0; }
-  20%  { opacity: 1; }
-  100% { transform: perspective(1200px) rotateY(0deg); opacity: 1; }
-}
-@keyframes painelSai {
-  0%   { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(.92); }
-}
 
 /* ---------------- conteúdo ---------------- */
 .abertura-conteudo {
@@ -309,10 +280,6 @@ body.abertura-ativa { overflow: hidden; }
 
 /* ---------------- animações ---------------- */
 @keyframes abrirEntrada { from { opacity: 0; } to { opacity: 1; } }
-@keyframes abrirSaida {
-  0%   { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1.06); }
-}
 @keyframes abrirLogo {
   0%   { opacity: 0; transform: scale(.72) rotate(-10deg); filter: blur(8px); }
   60%  { opacity: 1; filter: blur(0); }

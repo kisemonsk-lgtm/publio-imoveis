@@ -3,8 +3,8 @@
    ----------------------------------------------------------
    Duas folhas escuras com filete dourado cobrem a tela e se
    abrem para os lados, revelando a logo, o nome e o botão
-   Entrar. Depois de entrar, a porta FECHA de novo (o site
-   fica "guardado atrás dela") até a pessoa clicar em abrir.
+   Entrar. Clicou em Entrar, a abertura sai de cena de vez e o
+   site fica livre (não há segunda etapa, nada de prender).
    Roda no painel do corretor (index.html) e na Públio Cliente
    (publio-cliente.html).
    Quem abre um link de imóvel vai direto para a ficha, sem
@@ -13,10 +13,9 @@
 (function () {
   "use strict";
 
-  var CHAVE = "publio-abertura-v3";     // "1" = já entrou nesta sessão
+  var CHAVE = "publio-abertura-v4";     // "1" = já entrou nesta sessão
   var el = null;
-  var indo = false;
-  var fechada = false;                  // a porta está fechando o site?
+  var saindo = false;
 
   function temLinkDeFicha() {
     var h = location.hash || "";
@@ -52,23 +51,18 @@
     }
   }
 
-  /* mostra a abertura fechada e depois abre as portas */
+  /* mostra a abertura; as portas se abrem sozinhas */
   function mostrar() {
     el = document.getElementById("abertura");
     if (!el) return;
-    fechada = false;
     semearPo();
     el.hidden = false;
-    el.classList.remove("saindo", "fechando");
     document.body.classList.add("abertura-ativa");
     window.scrollTo({ top: 0 });
 
     var btn = document.getElementById("btnEntrarSistema");
     if (btn) {
-      if (!btn._ligado) {
-        btn.addEventListener("click", entrar);
-        btn._ligado = true;
-      }
+      btn.addEventListener("click", entrar);
       try { btn.focus({ preventScroll: true }); } catch (_) { }
     }
     document.addEventListener("keydown", teclado);
@@ -78,93 +72,45 @@
     if (!el || el.hidden) return;
     if (ev.key === "Enter" || ev.key === "Escape") {
       ev.preventDefault();
-      if (fechada) abrirDeNovo();
-      else entrar();
+      entrar();
     }
   }
 
-  function esconder() {
-    if (!el) return;
-    el.hidden = true;
-    el.classList.remove("saindo", "fechando");
-    document.body.classList.remove("abertura-ativa");
+  /* sai da frente de vez: esconde, libera a rolagem e não volta */
+  function sairDeCena() {
     document.removeEventListener("keydown", teclado);
-    el = null;
-    indo = false;
-    fechada = false;
-  }
-
-  /* Entrar: a porta abre, o site aparece — e depois a porta fecha de novo */
-  function entrar() {
-    if (!el || indo) return;
-    indo = true;
-    marcarEntrou();
     document.body.classList.remove("abertura-ativa");
-
-    var fimDaAbertura = function () {
-      // o site fica visível por um instante e a porta se fecha sobre ele
-      setTimeout(fecharDeNovo, reduzido() ? 0 : 1300);
-    };
-
-    if (reduzido()) { fimDaAbertura(); return; }
-
-    el.classList.add("saindo");
-    setTimeout(fimDaAbertura, 1150);
-  }
-
-  /* a porta volta a fechar o site, com o botão "Abrir" */
-  function fecharDeNovo() {
-    if (!el) return;
-    el.classList.remove("saindo");
-    el.classList.add("fechando");
-    fechada = true;
-    document.body.classList.add("abertura-ativa");
-
-    var painel = el.querySelector(".abertura-porta-painel");
-    if (painel) painel.classList.add("painel-fechado");
-    var btn = document.getElementById("btnEntrarSistema");
-    if (btn) {
-      btn.textContent = "Abrir";
-      btn.setAttribute("aria-label", "Abrir o site");
-      try { btn.focus({ preventScroll: true }); } catch (_) { }
+    if (el) {
+      el.hidden = true;
+      el.style.display = "none";
+      el.classList.remove("saindo");
     }
-    var linha = el.querySelector(".abertura-linha");
-    if (linha) linha.style.animation = "none";
-    indo = false;
+    el = null;
+
+    // o campo de título já fica pronto para digitar (só no painel do corretor)
+    var t = document.getElementById("f-titulo");
+    var p = document.getElementById("painel");
+    if (t && p && !p.hidden) {
+      try { t.focus({ preventScroll: true }); } catch (_) { }
+    }
   }
 
-  /* abrir de novo: a porta se abre uma vez mais */
-  function abrirDeNovo() {
-    if (!el || !fechada) return;
-    fechada = false;
-    indo = true;
-    el.classList.remove("fechando");
+  function entrar() {
+    if (!el || saindo) return;
+    saindo = true;
+    marcarEntrou();
+
+    if (reduzido()) { sairDeCena(); return; }
+
     el.classList.add("saindo");
-    document.body.classList.remove("abertura-ativa");
-
-    var painel = el.querySelector(".abertura-porta-painel");
-    if (painel) painel.classList.remove("painel-fechado");
-    var btn = document.getElementById("btnEntrarSistema");
-    if (btn) btn.textContent = "Entrar";
-
-    var fim = function () {
-      esconder();
-      // o campo de título já fica pronto para digitar (só no painel do corretor)
-      var t = document.getElementById("f-titulo");
-      var p = document.getElementById("painel");
-      if (t && p && !p.hidden) {
-        try { t.focus({ preventScroll: true }); } catch (_) { }
-      }
-    };
-    if (reduzido()) fim();
-    else setTimeout(fim, 1150);
+    setTimeout(sairDeCena, 400);
   }
 
   /* se alguém abrir um link de ficha com a abertura na tela, sai da frente */
   window.addEventListener("hashchange", function () {
     if (temLinkDeFicha() && el && !el.hidden) {
       marcarEntrou();
-      esconder();
+      sairDeCena();
     }
   });
 
