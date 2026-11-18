@@ -52,3 +52,34 @@ create policy "fotos apagar" on storage.objects
 
 -- 5) Conferência
 select 'tabela imoveis criada' as resultado, count(*) as imoveis from public.imoveis;
+
+-- ============================================================
+--  Aparelhos autorizados (Área do corretor)
+--  Rode este trecho também se o banco já existia antes desta versão.
+-- ============================================================
+
+create table if not exists public.config_dispositivos (
+  id        text primary key,
+  nome      text default '',
+  ver       boolean default true,
+  publicar  boolean default true,
+  apagar    boolean default false,
+  "vistoEm" bigint default 0
+);
+
+alter table public.config_dispositivos enable row level security;
+
+drop policy if exists "dispositivos le"       on public.config_dispositivos;
+drop policy if exists "dispositivos grava"    on public.config_dispositivos;
+drop policy if exists "dispositivos atualiza" on public.config_dispositivos;
+drop policy if exists "dispositivos apaga"    on public.config_dispositivos;
+
+create policy "dispositivos le"       on public.config_dispositivos for select using (true);
+create policy "dispositivos grava"    on public.config_dispositivos for insert with check (true);
+create policy "dispositivos atualiza" on public.config_dispositivos for update using (true) with check (true);
+create policy "dispositivos apaga"    on public.config_dispositivos for delete using (true);
+
+grant usage on schema public to anon, authenticated;
+grant select, insert, update, delete on public.config_dispositivos to anon, authenticated;
+
+select 'tabela config_dispositivos criada' as resultado, count(*) as aparelhos from public.config_dispositivos;

@@ -25,6 +25,7 @@
     </div>
     <button id="btnNovo" class="btn btn-primario">+ Novo imóvel</button>
     <button id="btnAtualizar" class="btn btn-neutro btn-mini" title="Buscar imóveis lançados em outros aparelhos">↻ Atualizar</button>
+    <button id="btnAdmin" class="btn btn-neutro btn-mini" title="Somente o dono: dispositivos e permissões">🔒 Área do corretor</button>
   </div>
 </header>
 
@@ -102,6 +103,81 @@
         <p id="listaVazia" class="vazio">Nenhum imóvel cadastrado ainda.</p>
       </div>
 
+    </div>
+  </section>
+
+  <!-- ============ ÁREA DO CORRETOR (só com usuário e senha) ============ -->
+  <section id="admin" class="admin" hidden>
+
+    <!-- login -->
+    <div id="adminLogin" class="cartao cartao-login">
+      <h2>Área do corretor</h2>
+      <p class="admin-sub">Entre com seu usuário e senha para liberar aparelhos e permissões.</p>
+      <label class="campo">
+        <span>Usuário</span>
+        <input id="loginUsuario" type="text" autocomplete="username" placeholder="seu usuário" />
+      </label>
+      <label class="campo">
+        <span>Senha</span>
+        <input id="loginSenha" type="password" autocomplete="current-password" placeholder="sua senha" />
+      </label>
+      <div class="acoes-form">
+        <button type="button" class="btn btn-primario" id="btnEntrar">Entrar</button>
+        <button type="button" class="btn btn-neutro" id="btnSairAdmin">← Voltar</button>
+      </div>
+      <p id="loginAviso" class="aviso" hidden></p>
+      <p class="admin-nota">Primeiro acesso? Entre com <b>admin</b> e a senha <b>publio2026</b> e troque a senha logo em seguida.</p>
+    </div>
+
+    <!-- dispositivos -->
+    <div id="adminPainel" hidden>
+      <div class="cartao">
+        <div class="cartao-cabecalho">
+          <h2>Aparelhos autorizados</h2>
+          <button type="button" class="btn btn-neutro btn-mini" id="btnSair">Sair</button>
+        </div>
+        <p class="admin-sub">Marque o que cada aparelho pode fazer. Quem não tem <b>apagar</b> não consegue excluir imóvel;
+          quem não tem <b>publicar</b> não consegue cadastrar nem enviar imóvel para os outros.</p>
+        <div class="tabela-dispositivos">
+          <table>
+            <thead>
+              <tr>
+                <th>Aparelho</th>
+                <th>Visto por último</th>
+                <th>Ver</th>
+                <th>Publicar</th>
+                <th>Apagar</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="listaDispositivos"></tbody>
+          </table>
+        </div>
+        <p id="dispVazio" class="vazio">Nenhum aparelho registrado ainda.</p>
+        <p id="dispAviso" class="aviso" hidden></p>
+      </div>
+
+      <div class="cartao">
+        <h2>Trocar a senha</h2>
+        <div class="linha">
+          <label class="campo">
+            <span>Usuário</span>
+            <input id="novoUsuario" type="text" placeholder="admin" />
+          </label>
+          <label class="campo">
+            <span>Senha nova</span>
+            <input id="novaSenha" type="password" placeholder="mínimo 6 caracteres" />
+          </label>
+        </div>
+        <label class="campo">
+          <span>Repita a senha nova</span>
+          <input id="novaSenha2" type="password" />
+        </label>
+        <div class="acoes-form">
+          <button type="button" class="btn btn-primario" id="btnSalvarSenha">Salvar usuário e senha</button>
+        </div>
+        <p id="senhaAviso" class="aviso" hidden></p>
+      </div>
     </div>
   </section>
 

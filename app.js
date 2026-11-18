@@ -625,6 +625,11 @@ function acoesMiniaturas(ev) {
 
 async function salvarForm(ev) {
   ev.preventDefault();
+  const perms = await minhasPermissoes();
+  if (!perms.publicar) {
+    aviso($("#avisoForm"), "Este aparelho não tem permissão para publicar imóveis. Peça ao corretor para liberar em Área do corretor.", true);
+    return;
+  }
   const titulo = $("#f-titulo").value.trim();
   if (!titulo) {
     aviso($("#avisoForm"), "Informe o título do anúncio.", true);
@@ -735,6 +740,11 @@ async function acaoLista(ev) {
   } else if (btn.dataset.acao === "editar") {
     preencherForm(im);
   } else if (btn.dataset.acao === "apagar") {
+    const perms = await minhasPermissoes();
+    if (!perms.apagar) {
+      aviso($("#avisoForm"), "Este aparelho não tem permissão para apagar imóveis. Peça ao corretor para liberar em Área do corretor.", true);
+      return;
+    }
     if (confirm(`Excluir "${im.titulo}"? A exclusão vale para todos os dispositivos.`)) {
       imoveis = imoveis.filter((x) => x.id !== id);
       await dbApagar(id);
@@ -1082,6 +1092,9 @@ async function iniciar() {
   }
   await carregarLista();
 
+  try { await iniciarAcesso(); } catch (e) { console.warn("Acesso:", e.message); }
+  ligarAdmin();
+
   $("#form").addEventListener("submit", salvarForm);
   $("#btnLimpar").addEventListener("click", limparForm);
   $("#btnNovo").addEventListener("click", () => {
@@ -1216,10 +1229,320 @@ async function iniciar() {
 function mostrarTela(destino) {
   const painel = document.getElementById("painel");
   const ficha = document.getElementById("ficha");
+  const admin = document.getElementById("admin");
   if (!painel || !ficha) return;
+  if (admin) admin.hidden = destino !== "admin";
   if (destino === "ficha") { painel.hidden = true; ficha.hidden = false; }
+  else if (destino === "admin") { painel.hidden = true; ficha.hidden = true; }
   else { ficha.hidden = true; painel.hidden = false; }
 }
+
+/* ==========================================================
+   ÁREA DO CORRETOR — login e permissões por aparelho
+   ----------------------------------------------------------
+   Quem entra com usuário e senha pode marcar, aparelho por
+   aparelho, o que pode ser feito: ver, publicar (cadastrar e
+   enviar imóvel) e apagar imóveis de todos os dispositivos.
+   O bloqueio vale no próprio aparelho (é um site sem servidor).
+   ========================================================== */
+const CHAVE_ACESSO = "publio-acesso-v1";      // usuário, senha (hash) e sessão
+const CHAVE_DISPOSITIVOS = "publio-dispositivos-v1";
+const ACESSO_PADRAO = { usuario: "admin", senhaHash: "", desde: 0 };
+const SENHA_PADRAO = "publio2026";
+const PERMISSOES_PADRAO = { ver: true, publicar: true, apagar: false };
+
+let acesso = null;              // { usuario, senhaHash, desde }
+let sessao = false;             // entrou nesta sessão do navegador?
+let aparelhoId = "";
+let aparelhoNome = "";
+let tentativasLogin = 0;
+let bloqueadoAte = 0;
+let dispositivosCache = [];
+
+function lerJSON(chave, padrao) {
+  try { const t = localStorage.getItem(chave); return t ? JSON.parse(t) : padrao; }
+  catch (_) { return padrao; }
+}
+function gravarJSON(chave, valor) {
+  try { localStorage.setItem(chave, JSON.stringify(valor)); return true; }
+  catch (_) { return false; }
+}
+
+async function sha256(texto) {
+  if (window.crypto && crypto.subtle) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  // reserva: navegador antigo sem crypto.subtle (não é criptografia forte)
+  let h1 = 0x811c9dc5, h2 = 0x1000193;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    h1 = (h1 ^ c) * 16777619 >>> 0;
+    h2 = (h2 + c * (i + 7)) >>> 0;
+  }
+  return "fb" + h1.toString(16) + h2.toString(16);
+}
+
+/* Cria o acesso na primeira vez e recupera o aparelho */
+async function iniciarAcesso() {
+  acesso = lerJSON(CHAVE_ACESSO, null);
+  if (!acesso || !acesso.usuario) {
+    acesso = Object.assign({}, ACESSO_PADRAO, { senhaHash: await sha256(SENHA_PADRAO), desde: Date.now() });
+    gravarJSON(CHAVE_ACESSO, acesso);
+  }
+  sessao = lerJSON(CHAVE_ACESSO + "-sessao", false) === true;
+
+  const disp = lerJSON(CHAVE_DISPOSITIVOS, null);
+  aparelhoId = (disp && disp.aparelhoId) || novoId();
+  aparelhoNome = (disp && disp.aparelhoNome) || detectarNomeAparelho();
+  gravarJSON(CHAVE_DISPOSITIVOS, { aparelhoId, aparelhoNome });
+  await registrarAparelho();
+}
+
+function detectarNomeAparelho() {
+  const ua = navigator.userAgent || "";
+  let tipo = "Computador";
+  if (/iPad|Tablet/i.test(ua)) tipo = "Tablet";
+  else if (/Mobi|Android|iPhone/i.test(ua)) tipo = "Celular";
+  let sis = "";
+  if (/Windows/i.test(ua)) sis = "Windows";
+  else if (/Android/i.test(ua)) sis = "Android";
+  else if (/iPhone|iPad|iOS/i.test(ua)) sis = "iPhone/iPad";
+  else if (/Mac OS X/i.test(ua)) sis = "Mac";
+  else if (/Linux/i.test(ua)) sis = "Linux";
+  return sis ? `${tipo} ${sis}` : tipo;
+}
+
+/* Lê a lista de aparelhos da nuvem (tabela config_dispositivos) */
+async function lerDispositivos() {
+  if (!NUVEM.ativa) return [];
+  try {
+    const r = await nuvemFetch(
+      sbUrl("config_dispositivos?select=id,nome,ver,publicar,apagar,vistoEm&order=vistoEm.desc&limit=200"),
+      { headers: sbHeaders(), cache: "no-store" }
+    );
+    const linhas = await r.json();
+    return (linhas || []).map((l) => ({
+      id: String(l.id),
+      nome: l.nome || "Aparelho",
+      ver: l.ver !== false,
+      publicar: l.publicar !== false,
+      apagar: l.apagar === true,
+      vistoEm: Number(l.vistoEm) || 0
+    }));
+  } catch (e) {
+    console.warn("Não consegui ler os aparelhos:", e.message);
+    return null;
+  }
+}
+
+async function gravarDispositivo(d) {
+  if (!NUVEM.ativa) return false;
+  const linha = { id: d.id, nome: d.nome, ver: !!d.ver, publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now() };
+  await nuvemFetch(sbUrl("config_dispositivos?on_conflict=id"), {
+    method: "POST",
+    headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify(linha)
+  });
+  return true;
+}
+
+/* Registra este aparelho na nuvem (cria na primeira vez, atualiza a data depois) */
+async function registrarAparelho() {
+  if (!NUVEM.ativa) return;
+  const lista = await lerDispositivos();
+  if (!lista) return;
+  const meu = lista.find((d) => d.id === aparelhoId);
+  try {
+    if (meu) {
+      meu.vistoEm = Date.now();
+      await gravarDispositivo(meu);
+    } else {
+      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now() }, PERMISSOES_PADRAO));
+    }
+  } catch (e) {
+    console.warn("Não consegui registrar o aparelho:", e.message);
+  }
+}
+
+/* Permissões do aparelho atual (quando a nuvem não responde, usa o padrão) */
+async function minhasPermissoes() {
+  if (sessao) return { ver: true, publicar: true, apagar: true };   // o dono logado manda
+  const lista = await lerDispositivos();
+  const meu = (lista || dispositivosCache || []).find((d) => d.id === aparelhoId);
+  return meu ? { ver: meu.ver, publicar: meu.publicar, apagar: meu.apagar } : Object.assign({}, PERMISSOES_PADRAO);
+}
+
+function ehAdmin() { return sessao === true; }
+
+async function abrirAdmin() {
+  mostrarTela("admin");
+  const login = document.getElementById("adminLogin");
+  const painel = document.getElementById("adminPainel");
+  if (!login || !painel) return;
+  login.hidden = sessao;
+  painel.hidden = !sessao;
+  if (!sessao) {
+    const u = document.getElementById("loginUsuario");
+    if (u) { u.value = acesso ? acesso.usuario : "admin"; setTimeout(() => document.getElementById("loginSenha").focus(), 60); }
+    aviso(document.getElementById("loginAviso"), "");
+  } else {
+    await carregarPainelAdmin();
+  }
+}
+
+async function tentarEntrar() {
+  const avisoEl = document.getElementById("loginAviso");
+  const agora = Date.now();
+  if (agora < bloqueadoAte) {
+    aviso(avisoEl, `Muitas tentativas. Tente de novo em ${Math.ceil((bloqueadoAte - agora) / 1000)}s.`, true);
+    return;
+  }
+  const usuario = (document.getElementById("loginUsuario").value || "").trim();
+  const senha = document.getElementById("loginSenha").value || "";
+  if (!usuario || !senha) { aviso(avisoEl, "Preencha usuário e senha.", true); return; }
+  const hash = await sha256(senha);
+  if (usuario.toLowerCase() === String(acesso.usuario).toLowerCase() && hash === acesso.senhaHash) {
+    sessao = true;
+    tentativasLogin = 0;
+    gravarJSON(CHAVE_ACESSO + "-sessao", true);
+    document.getElementById("loginSenha").value = "";
+    aviso(avisoEl, "");
+    await abrirAdmin();
+    await sincronizar();
+    renderLista();
+  } else {
+    tentativasLogin++;
+    if (tentativasLogin >= 5) { bloqueadoAte = Date.now() + 60000; tentativasLogin = 0; }
+    aviso(avisoEl, "Usuário ou senha incorretos.", true);
+  }
+}
+
+function sairAdmin() {
+  sessao = false;
+  gravarJSON(CHAVE_ACESSO + "-sessao", false);
+  mostrarTela("painel");
+  renderLista();
+}
+
+async function carregarPainelAdmin() {
+  const avisoEl = document.getElementById("dispAviso");
+  const corpo = document.getElementById("listaDispositivos");
+  if (!corpo) return;
+  const lista = await lerDispositivos();
+  if (lista === null) {
+    aviso(avisoEl, "Não consegui falar com a nuvem. Confira a internet e a configuração do Supabase.", true);
+    return;
+  }
+  dispositivosCache = lista;
+  aviso(avisoEl, "");
+  corpo.innerHTML = lista.map((d) => `
+    <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""}">
+      <td><span class="disp-nome">${escapar(d.nome)}</span>${d.id === aparelhoId ? '<span class="sel-eu">este aparelho</span>' : ''}<span class="disp-id">${d.id.slice(0, 8)}</span></td>
+      <td class="disp-data">${d.vistoEm ? quandoFoi(d.vistoEm) : "—"}</td>
+      <td><input type="checkbox" data-perm="ver" ${d.ver ? "checked" : ""} /></td>
+      <td><input type="checkbox" data-perm="publicar" ${d.publicar ? "checked" : ""} /></td>
+      <td><input type="checkbox" data-perm="apagar" ${d.apagar ? "checked" : ""} /></td>
+      <td><button type="button" class="btn btn-perigo btn-mini" data-acao="remover-aparelho">Remover</button></td>
+    </tr>`).join("");
+  document.getElementById("dispVazio").hidden = lista.length > 0;
+  const nu = document.getElementById("novoUsuario");
+  if (nu) nu.value = acesso.usuario;
+}
+
+function escapar(t) {
+  return String(t == null ? "" : t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function quandoFoi(ts) {
+  const dif = Date.now() - ts;
+  if (dif < 60000) return "agora";
+  if (dif < 3600000) return Math.round(dif / 60000) + " min atrás";
+  if (dif < 86400000) return Math.round(dif / 3600000) + " h atrás";
+  return new Date(ts).toLocaleDateString("pt-BR");
+}
+
+async function mudarPermissao(id, perm, valor) {
+  const lista = dispositivosCache || [];
+  const d = lista.find((x) => x.id === id);
+  if (!d) return;
+  if (id === aparelhoId && perm === "apagar" && !valor) {
+    // não deixa o dono se trancar fora sem querer
+    if (!confirm("Tirar a permissão de APAGAR deste aparelho (o seu)? Você não vai mais conseguir excluir imóveis por ele.")) {
+      await carregarPainelAdmin();
+      return;
+    }
+  }
+  d[perm] = valor;
+  try {
+    await gravarDispositivo(d);
+    aviso(document.getElementById("dispAviso"), "Permissões salvas.");
+  } catch (e) {
+    aviso(document.getElementById("dispAviso"), "Não consegui salvar: " + e.message, true);
+    await carregarPainelAdmin();
+  }
+}
+
+async function removerAparelho(id) {
+  const d = (dispositivosCache || []).find((x) => x.id === id);
+  if (!d) return;
+  if (!confirm(`Remover o aparelho "${d.nome}"? Ele volta para as permissões padrão.`)) return;
+  try {
+    await nuvemFetch(sbUrl(`config_dispositivos?id=eq.${encodeURIComponent(id)}`), {
+      method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" })
+    });
+    aviso(document.getElementById("dispAviso"), "Aparelho removido.");
+  } catch (e) {
+    aviso(document.getElementById("dispAviso"), "Não consegui remover: " + e.message, true);
+  }
+  await carregarPainelAdmin();
+}
+
+async function salvarCredenciais() {
+  const avisoEl = document.getElementById("senhaAviso");
+  const u = (document.getElementById("novoUsuario").value || "").trim();
+  const s1 = document.getElementById("novaSenha").value || "";
+  const s2 = document.getElementById("novaSenha2").value || "";
+  if (!u) { aviso(avisoEl, "Informe o usuário.", true); return; }
+  if (s1.length < 6) { aviso(avisoEl, "A senha precisa ter pelo menos 6 caracteres.", true); return; }
+  if (s1 !== s2) { aviso(avisoEl, "As duas senhas não são iguais.", true); return; }
+  acesso = { usuario: u, senhaHash: await sha256(s1), desde: Date.now() };
+  gravarJSON(CHAVE_ACESSO, acesso);
+  document.getElementById("novaSenha").value = "";
+  document.getElementById("novaSenha2").value = "";
+  aviso(avisoEl, "Usuário e senha salvos neste aparelho.");
+}
+
+/* Liga os botões da área do corretor */
+function ligarAdmin() {
+  const btnAdmin = document.getElementById("btnAdmin");
+  if (btnAdmin) btnAdmin.addEventListener("click", () => abrirAdmin());
+  const bEntrar = document.getElementById("btnEntrar");
+  if (bEntrar) bEntrar.addEventListener("click", tentarEntrar);
+  const bVoltar = document.getElementById("btnSairAdmin");
+  if (bVoltar) bVoltar.addEventListener("click", () => mostrarTela("painel"));
+  const bSair = document.getElementById("btnSair");
+  if (bSair) bSair.addEventListener("click", sairAdmin);
+  const bSenha = document.getElementById("btnSalvarSenha");
+  if (bSenha) bSenha.addEventListener("click", salvarCredenciais);
+  const senha = document.getElementById("loginSenha");
+  if (senha) senha.addEventListener("keydown", (ev) => { if (ev.key === "Enter") tentarEntrar(); });
+
+  const corpo = document.getElementById("listaDispositivos");
+  if (corpo) {
+    corpo.addEventListener("change", (ev) => {
+      const cb = ev.target.closest("input[data-perm]");
+      if (!cb) return;
+      const id = cb.closest("tr").dataset.id;
+      mudarPermissao(id, cb.dataset.perm, cb.checked);
+    });
+    corpo.addEventListener("click", (ev) => {
+      const b = ev.target.closest("button[data-acao='remover-aparelho']");
+      if (b) removerAparelho(b.closest("tr").dataset.id);
+    });
+  }
+}
+
 
 iniciar().catch((e) => {
   console.error("Falha ao iniciar:", e);

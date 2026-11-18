@@ -560,3 +560,51 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 560px) {
   .item-foto, .item-foto img { width: 64px; height: 56px; }
 }
+
+/* ---------- Área do corretor (login e dispositivos) ---------- */
+.admin { max-width: 860px; margin: 0 auto; }
+.cartao-login { max-width: 420px; margin: 30px auto; }
+.admin-sub { color: var(--texto-suave); font-size: .88rem; margin: 0 0 14px; line-height: 1.5; }
+.admin-nota { color: var(--texto-suave); font-size: .78rem; margin-top: 14px; line-height: 1.5; }
+.admin-nota b { color: var(--ouro-claro); }
+#adminPainel { display: grid; gap: 18px; }
+
+.tabela-dispositivos { overflow-x: auto; margin-top: 6px; }
+.tabela-dispositivos table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.tabela-dispositivos th {
+  text-align: left;
+  font-size: .72rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--texto-suave);
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--borda);
+  white-space: nowrap;
+}
+.tabela-dispositivos td {
+  padding: 10px;
+  border-bottom: 1px solid var(--linha);
+  vertical-align: middle;
+}
+.tabela-dispositivos tr:last-child td { border-bottom: 0; }
+.tabela-dispositivos .disp-nome { font-weight: 600; }
+.tabela-dispositivos .disp-id { display: block; color: var(--texto-suave); font-size: .72rem; font-family: ui-monospace, monospace; }
+.tabela-dispositivos .disp-data { color: var(--texto-suave); white-space: nowrap; font-size: .78rem; }
+.tabela-dispositivos input[type="checkbox"] {
+  width: 18px; height: 18px;
+  accent-color: var(--ouro);
+  cursor: pointer;
+}
+.tabela-dispositivos tr.eu { background: rgba(212, 175, 55, .06); }
+.selo-eu {
+  font-size: .62rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #17140a;
+  background: var(--ouro-claro);
+  border-radius: 5px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
