@@ -117,10 +117,14 @@
     </div>
 
     <article class="ficha-card">
-      <div class="ficha-imagem-wrap">
+      <div class="ficha-imagem-wrap" id="galeria">
         <img id="fichaImagem" alt="Foto do imóvel" />
-        <button type="button" class="seta seta-esq" id="setaEsq" aria-label="Foto anterior">‹</button>
-        <button type="button" class="seta seta-dir" id="setaDir" aria-label="Próxima foto">›</button>
+        <button type="button" class="seta seta-esq" id="setaEsq" aria-label="Foto anterior">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <button type="button" class="seta seta-dir" id="setaDir" aria-label="Próxima foto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
         <span class="contador-fotos" id="contadorFotos" hidden></span>
       </div>
 
@@ -138,7 +142,8 @@
         <p id="fichaDescricao" class="descricao"></p>
 
         <div class="ficha-acoes">
-          <a id="btnBaixarImagem" class="btn btn-primario" download>⬇ Baixar imagem</a>
+          <a id="btnBaixarImagem" class="btn btn-primario" download>⬇ Baixar esta foto</a>
+          <button id="btnBaixarTodas" class="btn btn-primario">⬇ Baixar todas (.zip)</button>
           <button id="btnCopiarDescricao" class="btn btn-destaque">⧉ Copiar descrição</button>
           <button id="btnCopiarTudo" class="btn btn-neutro">⧉ Copiar imagem + descrição</button>
         </div>
@@ -150,6 +155,7 @@
 
 </main>
 
+<script src="fflate.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
