@@ -315,8 +315,8 @@ function fmtPreco(valor) {
   return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-/* Reduz a imagem para no máximo 1400px e JPEG, para não pesar no compartilhamento */
-function comprimirImagem(file, maxLado = 1400, qualidade = 0.82) {
+/* Reduz a foto e guarda em JPEG pequeno, para caber no limite de 1 MB por imóvel do Firestore */
+function comprimirImagem(file, maxLado = 1200, qualidade = 0.78, alvoBytes = 210000) {
   return new Promise((resolve, reject) => {
     const leitor = new FileReader();
     leitor.onerror = () => reject(new Error("Não consegui ler o arquivo."));
@@ -324,24 +324,51 @@ function comprimirImagem(file, maxLado = 1400, qualidade = 0.82) {
       const img = new Image();
       img.onerror = () => reject(new Error("Arquivo não é uma imagem válida."));
       img.onload = () => {
-        let { width: w, height: h } = img;
-        const escala = Math.min(1, maxLado / Math.max(w, h));
-        w = Math.round(w * escala);
-        h = Math.round(h * escala);
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/jpeg", qualidade));
+        let lado = maxLado;
+        let q = qualidade;
+        let dataUrl = "";
+        let tentativas = 0;
+
+        const desenhar = () => {
+          const escala = Math.min(1, lado / Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width * escala));
+          const h = Math.max(1, Math.round(img.height * escala));
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          dataUrl = canvas.toDataURL("image/jpeg", q);
+        };
+
+        const bytes = () => Math.round((dataUrl.length - dataUrl.indexOf(",") - 1) * 0.75);
+
+        desenhar();
+        // reduz até caber no tamanho alvo (mantendo boa qualidade)
+        while (bytes() > alvoBytes && tentativas < 7) {
+          tentativas++;
+          if (q > 0.55) q -= 0.1;
+          else lado = Math.round(lado * 0.82);
+          desenhar();
+        }
+        resolve(dataUrl);
       };
       img.src = leitor.result;
     };
     leitor.readAsDataURL(file);
   });
 }
+
+/* Tamanho aproximado de um imóvel em bytes, como vai para o Firestore */
+function tamanhoImovel(im) {
+  const fotos = imagensDe(im);
+  const bytesFotos = fotos.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
+  const texto = (im.titulo || "").length + (im.descricao || "").length + (im.local || "").length + 200;
+  return bytesFotos + texto;
+}
+const LIMITE_IMOVEL = 1048000;   // margem de segurança sobre o limite de 1 MB do Firestore
 
 async function copiarTexto(texto) {
   try {
@@ -461,8 +488,10 @@ function renderMiniaturas() {
     </div>`).join("");
   const cont = document.getElementById("fotosInfo");
   if (cont) {
+    const bytes = imagemAtual.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
+    const mb = (bytes / 1048576).toFixed(2).replace(".", ",");
     cont.textContent = imagemAtual.length
-      ? `${imagemAtual.length} foto${imagemAtual.length > 1 ? "s" : ""} — a primeira é a capa`
+      ? `${imagemAtual.length} foto${imagemAtual.length > 1 ? "s" : ""} (${mb} MB) — a primeira é a capa`
       : "Nenhuma foto escolhida";
   }
 }
@@ -515,6 +544,12 @@ async function salvarForm(ev) {
   // atualiza a lista em memória
   const idx = imoveis.findIndex((x) => x.id === im.id);
   if (idx >= 0) imoveis[idx] = im; else imoveis.push(im);
+
+  if (tamanhoImovel(im) > LIMITE_IMOVEL) {
+    const mb = (tamanhoImovel(im) / 1048576).toFixed(2).replace(".", ",");
+    aviso($("#avisoForm"), `Fotos demais para um imóvel (${mb} MB). Remova algumas fotos e tente de novo.`, true);
+    return;
+  }
 
   const r = await publicar([im]);
   renderLista();
@@ -928,9 +963,16 @@ async function iniciar() {
     imagemAtual = imagemAtual.concat(novas).slice(0, 20);
     ev.target.value = "";
     renderMiniaturas();
-    aviso($("#avisoForm"), novas.length
-      ? `${novas.length} foto(s) adicionada(s). Total: ${imagemAtual.length}.`
-      : "Não consegui adicionar as fotos.");
+    if (!novas.length) {
+      aviso($("#avisoForm"), "Não consegui adicionar as fotos.", true);
+    } else {
+      const totalBytes = imagemAtual.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
+      if (totalBytes > LIMITE_IMOVEL) {
+        aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s), mas o total passou do limite do banco. Remova alguma foto.`, true);
+      } else {
+        aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s). Total: ${imagemAtual.length}.`);
+      }
+    }
   });
 
   const mini = document.getElementById("miniaturas");
