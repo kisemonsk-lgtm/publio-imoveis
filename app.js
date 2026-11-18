@@ -1759,11 +1759,26 @@ async function garantirPedido() {
 /* ---- pedidos de acesso na nuvem ---- */
 async function nuvemGravarPedido(codigo, dados) {
   if (!NUVEM.ativa) return false;
-  await nuvemFetch(sbUrl("pedidos_acesso?on_conflict=codigo"), {
-    method: "POST",
-    headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
-    body: JSON.stringify({ codigo, aparelhoId: dados.id, nome: dados.nome, criadoEm: dados.criadoEm })
-  });
+  const corpo = JSON.stringify({ codigo, aparelhoId: dados.id, nome: dados.nome, criadoEm: dados.criadoEm });
+  try {
+    await nuvemFetch(sbUrl("pedidos_acesso"), {
+      method: "POST",
+      headers: sbHeaders({ "Prefer": "return=minimal" }),
+      body: corpo
+    });
+  } catch (e) {
+    // se o código já existir (repetido), apaga o antigo e grava de novo
+    if (/duplicate|23505|conflit/i.test(e.message)) {
+      await nuvemApagarPedido(codigo);
+      await nuvemFetch(sbUrl("pedidos_acesso"), {
+        method: "POST",
+        headers: sbHeaders({ "Prefer": "return=minimal" }),
+        body: corpo
+      });
+      return true;
+    }
+    throw e;
+  }
   return true;
 }
 
