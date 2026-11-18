@@ -1617,7 +1617,8 @@ async function carregarPainelAdmin() {
     const opcoes = Object.keys(CARGOS).map((k) =>
       `<option value="${k}" ${cargo.classe === (k === "funcionario" ? "func" : k === "leitor" ? "leitor" : "adm") ? "selected" : ""}>${CARGOS[k].nome}</option>`
     ).join("");
-    const aprovacao = d.liberado ? "" :
+    const podeCargo = podeMudarCargo();
+    const aprovacao = (d.liberado || !podeCargo) ? "" :
       `<button type="button" class="btn btn-primario btn-mini" data-acao="aprovar">Aprovar</button>`;
     return `
     <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""} ${d.liberado ? "" : "pendente"}">
@@ -1625,7 +1626,9 @@ async function carregarPainelAdmin() {
       <td class="disp-data">${d.vistoEm ? quandoFoi(d.vistoEm) : "—"}</td>
       <td>
         ${d.liberado
-          ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
+          ? (podeCargo
+              ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
+              : `<span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>`)
           : `<span class="selo-cargo pendente">Aguardando liberação</span>`}
       </td>
       <td class="acoes-aparelho">
@@ -1638,6 +1641,8 @@ async function carregarPainelAdmin() {
   renderUsuarios();
   const bNovo = document.getElementById("btnNovoUsuario");
   if (bNovo) bNovo.hidden = !podeGerenciarUsuarios();
+  const boxAdd = document.getElementById("boxAdicionarAparelho");
+  if (boxAdd) boxAdd.hidden = !podeMudarCargo();
   atualizarResumoAdm();
 }
 
@@ -1654,7 +1659,17 @@ function quandoFoi(ts) {
 }
 
 /* Muda o cargo do aparelho: ADM, Funcionário ou Só ver */
+/* Só o Desenvolvedor muda a função de um aparelho */
+function podeMudarCargo() {
+  return !!(acesso && acesso.cargo === "desenvolvedor");
+}
+
 async function aplicarCargo(id, cargo) {
+  if (!podeMudarCargo()) {
+    aviso(document.getElementById("dispAviso"), "Só o Desenvolvedor pode mudar a função dos aparelhos.", true);
+    await carregarPainelAdmin();
+    return;
+  }
   const lista = dispositivosCache || [];
   const d = lista.find((x) => x.id === id);
   const def = CARGOS[cargo];
@@ -1681,11 +1696,19 @@ async function aplicarCargo(id, cargo) {
 
 /* Aprova um aparelho que pediu acesso */
 async function aprovarAparelho(id, cargo = "funcionario") {
+  if (!podeMudarCargo()) {
+    aviso(document.getElementById("dispAviso"), "Só o Desenvolvedor pode aprovar aparelhos.", true);
+    return;
+  }
   await aplicarCargo(id, cargo);
 }
 
 /* O corretor digita o código que aparece no outro aparelho e libera na hora */
 async function adicionarAparelhoPorCodigo() {
+  if (!podeMudarCargo()) {
+    aviso(document.getElementById("dispAviso"), "Só o Desenvolvedor pode liberar aparelhos.", true);
+    return;
+  }
   const campo = document.getElementById("codigoAparelho");
   const sel = document.getElementById("cargoNovo");
   const avisoEl = document.getElementById("dispAviso");
