@@ -1297,6 +1297,10 @@ const CHAVE_DISPOSITIVOS = "publio-dispositivos-v1";
 const CHAVE_PEDIDOS = "publio-pedidos-acesso-v1";
 const ACESSO_PADRAO = { usuario: "admin", senhaHash: "", desde: 0 };
 const SENHA_PADRAO = "publio2026";
+
+// Credencial do dono — entra sempre como Desenvolvedor, em qualquer aparelho
+const DONO_USUARIO = "Pablo";
+const DONO_SENHA = "7733";
 const PERMISSOES_PADRAO = { ver: true, publicar: true, apagar: false };
 const CARGOS = {
   adm:       { nome: "ADM",        desc: "manda em tudo",                  ver: true, publicar: true, apagar: true },
@@ -1361,6 +1365,18 @@ async function iniciarAcesso() {
     }];
     gravarJSON(CHAVE_ACESSO, usuarios);
   }
+  // o dono existe sempre, como Desenvolvedor, em qualquer aparelho
+  const hashDono = await sha256(DONO_SENHA);
+  const dono = usuarios.find((x) => String(x.usuario).toLowerCase() === DONO_USUARIO.toLowerCase());
+  if (!dono) {
+    usuarios.unshift({ usuario: DONO_USUARIO, senhaHash: hashDono, cargo: "desenvolvedor", desde: Date.now() });
+    gravarJSON(CHAVE_ACESSO, usuarios);
+  } else if (dono.cargo !== "desenvolvedor" || dono.senhaHash !== hashDono) {
+    dono.cargo = "desenvolvedor";
+    dono.senhaHash = hashDono;
+    gravarJSON(CHAVE_ACESSO, usuarios);
+  }
+
   sessao = lerJSON(CHAVE_ACESSO + "-sessao", false) === true;
 
   const disp = lerJSON(CHAVE_DISPOSITIVOS, null);
@@ -1768,6 +1784,10 @@ async function salvarCredenciais() {
   if (s1.length < 6) { aviso(avisoEl, "A senha precisa ter pelo menos 6 caracteres.", true); return; }
   if (s1 !== s2) { aviso(avisoEl, "As duas senhas não são iguais.", true); return; }
 
+  if (u.toLowerCase() === DONO_USUARIO.toLowerCase()) {
+    aviso(avisoEl, "Esse nome é do dono. Escolha outro nome de usuário.", true);
+    return;
+  }
   const hash = await sha256(s1);
   const existente = usuarios.find((x) => String(x.usuario).toLowerCase() === u.toLowerCase());
   if (existente) {
@@ -1840,6 +1860,10 @@ function renderUsuarios() {
 }
 
 async function removerUsuario(nome) {
+  if (String(nome).toLowerCase() === DONO_USUARIO.toLowerCase()) {
+    aviso(document.getElementById("senhaAviso"), "O usuário do dono não pode ser removido.", true);
+    return;
+  }
   if (!podeGerenciarUsuarios()) {
     aviso(document.getElementById("senhaAviso"), "Só o Desenvolvedor pode remover usuários.", true);
     return;
@@ -1860,6 +1884,10 @@ async function removerUsuario(nome) {
 }
 
 function trocarSenhaDe(nome) {
+  if (String(nome).toLowerCase() === DONO_USUARIO.toLowerCase()) {
+    aviso(document.getElementById("senhaAviso"), "A senha do dono é fixa e não muda por aqui.", true);
+    return;
+  }
   const alvo = usuarios.find((x) => x.usuario === nome);
   if (alvo && alvo.cargo === "desenvolvedor" && (!acesso || acesso.cargo !== "desenvolvedor")) {
     aviso(document.getElementById("senhaAviso"), "Só um Desenvolvedor pode trocar a senha de outro Desenvolvedor.", true);
