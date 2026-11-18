@@ -1,6 +1,6 @@
 /* ==========================================================
    Públio Imóveis — fichas de imóveis
-   Os imóveis ficam salvos numa nuvem compartilhada (Firebase Firestore),
+   Os imóveis ficam salvos numa nuvem compartilhada (Supabase: banco + fotos),
    então TODOS os dispositivos veem a mesma lista.
    Se a nuvem não estiver configurada, cai para o armazenamento
    local do navegador (IndexedDB), sem quebrar nada.
@@ -13,7 +13,7 @@ const STORE_META = "meta";
 
 /* ---- Configuração da nuvem ----
    SUPABASE: preencha "url" e "chave" (Project URL e anon/publishable key).
-   Enquanto estiverem vazios, o app usa o Firebase abaixo.                    */
+   Enquanto estiverem vazios, o app funciona só neste aparelho (modo local).   */
 const SUPABASE = {
   url: "",                       // ex.: https://abcdefgh.supabase.co
   chave: "",                     // ex.: sb_publishable_... (ou a anon key)
@@ -24,7 +24,7 @@ const SUPABASE = {
 
 const NUVEM = {
   get ativa() { return SUPABASE.ativa; },
-  fotosFora: true   // fotos em servidor de arquivos; o banco guarda só os endereços
+  fotosFora: true   // fotos no Storage do Supabase; o banco guarda só os endereços
 };
 
 let db = null;
@@ -145,6 +145,31 @@ async function nuvemLer() {
   }));
 }
 
+/* Lê um imóvel só pelo id (para o cliente que abre a ficha sem ter a lista) */
+async function nuvemLerUm(id) {
+  if (!NUVEM.ativa) return null;
+  const r = await nuvemFetch(
+    sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_IMOVEL}&id=eq.${encodeURIComponent(id)}&limit=1`),
+    { headers: sbHeaders(), cache: "no-store" }
+  );
+  const linhas = await r.json();
+  const l = (linhas || [])[0];
+  if (!l) return null;
+  return {
+    id: String(l.id),
+    titulo: l.titulo || "",
+    tipo: l.tipo || "",
+    finalidade: l.finalidade || "",
+    preco: l.preco || "",
+    local: l.local || "",
+    descricao: l.descricao || "",
+    imagem: l.imagem || "",
+    imagens: Array.isArray(l.imagens) ? l.imagens : (l.imagem ? [l.imagem] : []),
+    criadoEm: Number(l.criadoEm) || Date.now(),
+    atualizadoEm: Number(l.atualizadoEm) || Date.now()
+  };
+}
+
 /* Grava um imóvel (cria ou atualiza) */
 async function nuvemSalvarUm(im) {
   if (!NUVEM.ativa) return false;
@@ -188,10 +213,12 @@ async function nuvemEnviarLista(lista) {
   return true;
 }
 
-/* ---------- Fotos fora do banco (Catbox, grátis e sem conta) ----------
-   O Firestore só aceita 1 MB por imóvel. Aqui as fotos vão para um
-   servidor de arquivos gratuito e o banco guarda apenas o endereço delas. */
-const FOTOS_URL = "https://catbox.moe/user/api.php";
+/* ---------- Fotos no Storage do Supabase (bucket público "fotos") ----------
+   As fotos vão para o bucket do próprio projeto e o banco guarda só o endereço
+   público delas. Assim não há limite de 1 MB por imóvel e as fotos são do dono. */
+function sbStorageUrl(caminho) {
+  return SUPABASE.url.replace(/\/$/, "") + "/storage/v1/object/public/" + SUPABASE.bucket + "/" + caminho;
+}
 
 function dataUrlParaBlob(dataUrl) {
   const [cabeca, b64] = String(dataUrl).split(",");
@@ -202,16 +229,28 @@ function dataUrlParaBlob(dataUrl) {
   return new Blob([bytes], { type: tipo });
 }
 
-/* Envia a foto e devolve o endereço público dela */
+/* Envia a foto para o bucket e devolve o endereço público dela */
 async function enviarFotoParaServidor(dataUrl) {
   const blob = dataUrlParaBlob(dataUrl);
-  const form = new FormData();
-  form.append("reqtype", "fileupload");
-  form.append("fileToUpload", blob, "foto.jpg");
-  const r = await fetch(FOTOS_URL, { method: "POST", body: form });
-  const texto = (await r.text()).trim();
-  if (!r.ok || !/^https?:\/\//.test(texto)) throw new Error("o envio da foto falhou (" + (r.status || "sem resposta") + ")");
-  return texto;
+  const nome = novoId() + ".jpg";
+  const caminho = "imoveis/" + nome;
+  const r = await fetch(SUPABASE.url.replace(/\/$/, "") + "/storage/v1/object/" + SUPABASE.bucket + "/" + caminho, {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE.chave,
+      "Authorization": "Bearer " + SUPABASE.chave,
+      "Content-Type": "image/jpeg",
+      "x-upsert": "true",
+      "cache-control": "public, max-age=31536000"
+    },
+    body: blob
+  });
+  if (!r.ok) {
+    let detalhe = "";
+    try { detalhe = (await r.json()).message || ""; } catch (_) { detalhe = ""; }
+    throw new Error("o envio da foto falhou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
+  }
+  return sbStorageUrl(caminho);
 }
 
 /* Troca as fotos guardadas no aparelho por endereços na internet */
@@ -285,7 +324,7 @@ async function publicar(listaParaEnviar) {
   let listaFinal = [];
   let erroEnvio = "";
 
-  // 1) manda as fotos para o servidor de fotos e grava o imóvel no banco
+  // 1) manda as fotos para o Storage do Supabase e grava o imóvel no banco
   try {
     for (const im of lista) listaFinal.push(await enviarFotosParaServidor(im));
     await nuvemEnviarLista(listaFinal);
@@ -330,10 +369,12 @@ async function publicar(listaParaEnviar) {
 function lastErroLegivel(msg) {
   const t = String(msg || "");
   if (/respondeu 400/.test(t)) return "as fotos ficaram grandes demais. Remova uma foto e salve de novo.";
-  if (/respondeu 403/.test(t)) return "o banco está bloqueando este navegador. Verifique as regras do Firestore, o bloqueador de anúncios ou o antivírus.";
-  if (/respondeu 404/.test(t)) return "o projeto do Firebase não foi encontrado.";
-  if (/respondeu 5\d\d/.test(t)) return "o servidor do Firebase está instável. Tente de novo em alguns segundos.";
-  if (/rede|Failed to fetch|conexão/i.test(t)) return "sem conexão com a internet ou o acesso ao Firebase está bloqueado neste navegador.";
+  if (/respondeu 401/.test(t)) return "a chave do Supabase está errada. Confira \"url\" e \"chave\" no app.js.";
+  if (/respondeu 403/.test(t) || /row-level security|RLS/i.test(t)) return "o Supabase está bloqueando este navegador. Rode o SUPABASE.sql de novo no SQL Editor.";
+  if (/respondeu 404/.test(t)) return "o projeto ou a tabela do Supabase não foi encontrado. Confira \"url\" no app.js e se o SUPABASE.sql foi rodado.";
+  if (/respondeu 5\d\d/.test(t)) return "o servidor do Supabase está instável. Tente de novo em alguns segundos.";
+  if (/Bucket not found/i.test(t)) return "o bucket \"fotos\" não existe. Rode o SUPABASE.sql de novo no SQL Editor.";
+  if (/rede|Failed to fetch|conexão/i.test(t)) return "sem conexão com a internet ou o acesso ao Supabase está bloqueado neste navegador.";
   return t || "não confirmou o envio";
 }
 
@@ -343,7 +384,7 @@ function atualizarStatusNuvem() {
   if (!NUVEM.ativa) {
     el.textContent = "Modo local — só neste aparelho";
     el.className = "status-nuvem local";
-    el.title = "Para todos os dispositivos verem os mesmos imóveis, ative a nuvem (veja COMO-ATIVAR-A-NUVEM.md).";
+    el.title = "Para todos os dispositivos verem os mesmos imóveis, ative a nuvem (veja MIGRAR-PARA-SUPABASE.md).";
     return;
   }
   if (nuvemOk === true) {
@@ -433,16 +474,16 @@ function comprimirImagem(file, maxLado = 1600, qualidade = 0.85, alvoBytes = 700
   });
 }
 
-/* Tamanho aproximado de um imóvel em bytes, como vai para o Firestore */
+/* Tamanho aproximado de um imóvel em bytes (as fotos ficam no Storage) */
 function tamanhoImovel(im) {
   const fotos = imagensDe(im);
   const bytesFotos = fotos.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
   const texto = (im.titulo || "").length + (im.descricao || "").length + (im.local || "").length + 200;
   return bytesFotos + texto;
 }
-const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (as fotos ficam fora dele)
-const MAX_FOTOS = NUVEM.fotosFora ? 30 : 10;   // 30 fotos com as fotos fora do banco
-const LIMITE_FOTO = 5000000;     // 5 MB por foto (limite do servidor de fotos)
+const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (as fotos ficam no Storage)
+const MAX_FOTOS = 30;            // fotos por imóvel (as fotos ficam no Storage)
+const LIMITE_FOTO = 5000000;     // 5 MB por foto (limite do bucket)
 
 async function copiarTexto(texto) {
   try {
@@ -980,6 +1021,10 @@ async function rotear() {
   if (h.startsWith("#ver/")) {
     const id = h.slice(5);
     let im = imoveis.find((x) => x.id === id);
+    if (!im) {
+      // cliente que abriu o link direto: busca só este imóvel no Supabase
+      try { im = await nuvemLerUm(id); } catch (_) { im = null; }
+    }
     if (!im) {
       await sincronizar();
       im = imoveis.find((x) => x.id === id);
