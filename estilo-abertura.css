@@ -28,9 +28,8 @@ body.abertura-ativa { overflow: hidden; }
 /* ao entrar: a abertura some por completo (o JS tira do DOM) */
 .abertura.saindo { pointer-events: none; }
 
-/* brilho que respira atrás da logo */
-.abertura::before {
-  content: "";
+/* brilho atrás da logo (div própria: o ::before/::after agora são as folhas da porta) */
+.abertura-brilho {
   position: absolute;
   width: min(78vmin, 560px);
   aspect-ratio: 1;
@@ -71,48 +70,56 @@ body.abertura-ativa { overflow: hidden; }
   animation: abrirPo linear infinite;
 }
 
-/* ---------------- a porta (curtina) que se abre no meio ---------------- */
-/* Baseado no efeito "curtain opening" do CSS-Tricks: duas folhas de 50% da
-   tela, cada uma deslizando para o seu lado (translateX ±100%) com
-   transition de 1s ease-out, revelando o conteúdo atrás.
-   Aqui a porta fica FECHADA quando a pessoa clica em Entrar: as folhas
-   deslizam para os lados e o site aparece. */
+/* ---------------- a porta que se abre no meio, na TELA TODA ---------------- */
+/* Duas folhas (::before e ::after do PRÓPRIO .abertura) presas na tela,
+   cada uma com metade da largura e a altura inteira. Elas deslizam para
+   os lados com transition 1s ease-out, revelando o site inteiro.
+   Ficam invisíveis até a pessoa clicar em Entrar. */
+.abertura::before,
+.abertura::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  z-index: 30;                     /* acima de tudo dentro da abertura */
+  pointer-events: none;
+  visibility: hidden;              /* só aparecem no clique em Entrar */
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 246, 221, .10), transparent 60%),
+    linear-gradient(165deg, #302a1a 0%, #17140e 40%, #070605 100%);
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, .45), inset 0 0 70px rgba(0, 0, 0, .92);
+  transition: transform 1s ease-out;
+  will-change: transform;
+}
+/* folha da esquerda: começa na borda esquerda e tem o filete dourado no meio */
+.abertura::before {
+  left: 0;
+  border-right: 1px solid rgba(232, 199, 102, .85);
+  transform: translateX(0);
+}
+/* folha da direita: começa na linha do meio e vai até a borda direita */
+.abertura::after {
+  left: 50%;
+  border-left: 1px solid rgba(232, 199, 102, .85);
+  transform: translateX(0);
+}
+
+/* ---- clique em Entrar: as folhas aparecem e deslizam para fora da tela ---- */
+.abertura.abrindo::before,
+.abertura.abrindo::after { visibility: visible; }
+.abertura.abrindo.curtina::before { transform: translateX(-100%); }
+.abertura.abrindo.curtina::after  { transform: translateX(100%); }
+.abertura.abrindo .abertura-conteudo { animation: painelSome .35s ease both; }
+
+/* o bloco da porta no HTML não precisa mais desenhar nada */
 .abertura-porta {
-  position: absolute;            /* ocupa a tela toda, para as folhas irem de ponta a ponta */
-  inset: 0;
-  z-index: 4;
   display: grid;
   place-items: center;
   width: 100%;
   padding: 0;
-  pointer-events: none;
 }
-.abertura-porta::before,
-.abertura-porta::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 50.5%;                  /* cada folha pega metade da tela */
-  height: 100%;                  /* altura da TELA inteira (não do conteúdo) */
-  z-index: 3;
-  pointer-events: none;
-  visibility: hidden;            /* só aparecem no clique em Entrar */
-  background:
-    radial-gradient(120% 80% at 50% 0%, rgba(255, 246, 221, .10), transparent 60%),
-    linear-gradient(165deg, #302a1a 0%, #17140e 40%, #070605 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(212, 175, 55, .45),
-    inset 0 0 70px rgba(0, 0, 0, .92),
-    0 0 40px rgba(0, 0, 0, .55);
-  transition: transform 1s ease-out;   /* o deslizar da curtina */
-  will-change: transform;
-}
-.abertura-porta::before { border-right: 1px solid rgba(232, 199, 102, .85); }
-.abertura-porta::after  { border-left: 1px solid rgba(232, 199, 102, .85); }
-
-/* o conteúdo do outro lado da porta */
 .abertura-porta-painel {
   position: relative;
   z-index: 1;
@@ -124,17 +131,6 @@ body.abertura-ativa { overflow: hidden; }
   width: 100%;
   padding: 10px 0;
 }
-
-/* ---- clique em Entrar: a porta aparece fechada e desliza para os lados ---- */
-.abertura.abrindo .abertura-porta::before,
-.abertura.abrindo .abertura-porta::after { visibility: visible; }
-.abertura.abrindo .abertura-porta::before { transform: translateX(0); }
-.abertura.abrindo .abertura-porta::after  { transform: translateX(0); }
-.abertura.abrindo .abertura-porta-painel { animation: painelSome .35s ease both; }
-
-/* depois de um instante, as folhas saem da tela */
-.abertura.abrindo.curtina .abertura-porta::before { transform: translateX(-100%); }
-.abertura.abrindo.curtina .abertura-porta::after  { transform: translateX(100%); }
 
 @keyframes painelSome {
   0%   { opacity: 1; }
@@ -278,10 +274,10 @@ body.abertura-ativa { overflow: hidden; }
 /* Quem prefere menos movimento: a abertura continua, só que mais curta
    e sem as firulas (brilho da logo, pontinhos subindo). */
 @media (prefers-reduced-motion: reduce) {
-  .abertura::before, .abertura-linha, .abertura-logo::before,
+  .abertura-brilho, .abertura-linha, .abertura-logo::before,
   .abertura-logo::after, .abertura-po i {
     animation: none !important;
   }
-  .abertura-porta::before,
-  .abertura-porta::after { transition-duration: .45s; }
+  .abertura::before,
+  .abertura::after { transition-duration: .45s; }
 }
