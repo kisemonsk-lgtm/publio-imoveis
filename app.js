@@ -316,7 +316,7 @@ function fmtPreco(valor) {
 }
 
 /* Reduz a foto e guarda em JPEG pequeno, para caber no limite de 1 MB por imóvel do Firestore */
-function comprimirImagem(file, maxLado = 1200, qualidade = 0.78, alvoBytes = 210000) {
+function comprimirImagem(file, maxLado = 1200, qualidade = 0.78, alvoBytes = 100000) {
   return new Promise((resolve, reject) => {
     const leitor = new FileReader();
     leitor.onerror = () => reject(new Error("Não consegui ler o arquivo."));
@@ -369,6 +369,7 @@ function tamanhoImovel(im) {
   return bytesFotos + texto;
 }
 const LIMITE_IMOVEL = 1048000;   // margem de segurança sobre o limite de 1 MB do Firestore
+const MAX_FOTOS = 10;            // fotos por imóvel (cabe no limite de 1 MB)
 
 async function copiarTexto(texto) {
   try {
@@ -960,11 +961,13 @@ async function iniciar() {
         aviso($("#avisoForm"), e.message, true);
       }
     }
-    imagemAtual = imagemAtual.concat(novas).slice(0, 20);
+    imagemAtual = imagemAtual.concat(novas).slice(0, MAX_FOTOS);
     ev.target.value = "";
     renderMiniaturas();
     if (!novas.length) {
       aviso($("#avisoForm"), "Não consegui adicionar as fotos.", true);
+    } else if (imagemAtual.length >= MAX_FOTOS) {
+      aviso($("#avisoForm"), `Limite de ${MAX_FOTOS} fotos por imóvel atingido.`);
     } else {
       const totalBytes = imagemAtual.reduce((t, d) => t + Math.round((String(d).length - String(d).indexOf(",") - 1) * 0.75), 0);
       if (totalBytes > LIMITE_IMOVEL) {
