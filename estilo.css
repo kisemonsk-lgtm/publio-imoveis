@@ -355,3 +355,32 @@ input:focus, select:focus, textarea:focus {
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgba(212, 175, 55, .3);
 }
+
+/* ---------- Status da nuvem / botões do topo ---------- */
+.topo-inner { align-items: center; }
+.status-nuvem {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: .7rem;
+  letter-spacing: .02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  color: var(--texto-suave);
+  background: rgba(255, 255, 255, .03);
+}
+.status-nuvem.ok {
+  color: #8fe0a8;
+  border-color: rgba(90, 200, 130, .35);
+  background: rgba(90, 200, 130, .09);
+}
+.status-nuvem.erro {
+  color: #ff9a90;
+  border-color: rgba(224, 87, 76, .4);
+  background: rgba(224, 87, 76, .1);
+}
+.status-nuvem.local {
+  color: var(--ouro-claro);
+  border-color: rgba(212, 175, 55, .35);
+  background: rgba(212, 175, 55, .08);
+}
