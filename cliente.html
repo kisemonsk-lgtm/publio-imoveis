@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Públio Imóveis — Imóveis disponíveis</title>
+<link rel="icon" href="logo-publio.png" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="theme-color" content="#0c0b09" />
+<meta name="color-scheme" content="dark" />
+<meta name="description" content="Casas, apartamentos e terrenos da Públio Imóveis — mais que imóveis, realizamos histórias." />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="stylesheet" href="estilo.css?v=10" />
+<link rel="stylesheet" href="estilo-cliente.css?v=1" />
+</head>
+<body class="cliente-pagina">
+
+<header class="cliente-topo">
+  <div class="cliente-topo-inner">
+    <div class="cliente-marca">
+      <img src="logo-publio.png" alt="Públio Imóveis" />
+      <div>
+        <h1>Públio Imóveis</h1>
+        <p>Mais que imóveis, realizamos histórias</p>
+      </div>
+    </div>
+    <button type="button" class="btn btn-neutro btn-mini btn-atualizar" id="btnAtualizarCliente" title="Buscar imóveis novos">↻ Atualizar</button>
+  </div>
+</header>
+
+<main>
+  <section class="cliente-hero">
+    <h2>Encontre o seu imóvel</h2>
+    <p>Casas, apartamentos e terrenos selecionados. Toque em um imóvel para ver todas as fotos e a descrição completa.</p>
+    <span class="cliente-contador" id="contadorCasas" hidden></span>
+  </section>
+
+  <div class="cliente-filtros">
+    <div class="cliente-busca">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="buscaCliente" type="search" placeholder="Buscar por cidade, bairro ou título..." autocomplete="off" />
+    </div>
+    <div class="cliente-tipos" id="tiposCliente">
+      <button type="button" class="chip ativo" data-tipo="">Todos</button>
+      <button type="button" class="chip" data-tipo="Casa">Casas</button>
+      <button type="button" class="chip" data-tipo="Apartamento">Apartamentos</button>
+      <button type="button" class="chip" data-tipo="Terreno">Terrenos</button>
+      <button type="button" class="chip" data-tipo="Sítio / Chácara">Sítios e chácaras</button>
+      <button type="button" class="chip" data-tipo="Galpão / Armazém">Galpões</button>
+      <button type="button" class="chip" data-tipo="Sala comercial">Salas comerciais</button>
+    </div>
+  </div>
+
+  <div id="avisoCliente" class="cliente-aviso" hidden></div>
+
+  <section class="cliente-casas">
+    <div class="grade-casas" id="gradeCasas"></div>
+    <p class="vazio" id="casasVazio" hidden>Ainda não há imóveis publicados. Volte em breve.</p>
+  </section>
+</main>
+
+<footer class="cliente-rodape">
+  <img src="logo-publio.png" alt="" />
+  <div><b>Públio Imóveis</b> — mais que imóveis, realizamos histórias</div>
+</footer>
+
+<!-- ============ IMÓVEL ABERTO (fotos + descrição) ============ -->
+<div class="casa-modal" id="casaModal" hidden role="dialog" aria-modal="true" aria-labelledby="casaModalTitulo">
+  <div class="casa-modal-caixa">
+    <button type="button" class="casa-modal-fechar" id="casaModalFechar" aria-label="Fechar">✕</button>
+
+    <div class="casa-modal-palco" id="casaModalPalco">
+      <img id="casaModalImagem" alt="" />
+      <div class="casa-modal-sem-foto" id="casaModalSemFoto" hidden>sem foto</div>
+      <button type="button" class="seta seta-esq casa-modal-setas" id="setaEsqCasa" aria-label="Foto anterior">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button type="button" class="seta seta-dir casa-modal-setas" id="setaDirCasa" aria-label="Próxima foto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+      <span class="casa-modal-contador" id="casaModalContador" hidden></span>
+    </div>
+
+    <div class="casa-modal-info">
+      <div>
+        <p class="etiqueta" id="casaModalEtiqueta"></p>
+        <h2 id="casaModalTitulo">Imóvel</h2>
+        <p class="local" id="casaModalLocal"></p>
+      </div>
+      <p class="preco" id="casaModalPreco"></p>
+
+      <h3 class="rotulo-desc">Descrição do imóvel</h3>
+      <p class="casa-modal-descricao" id="casaModalDescricao"></p>
+
+      <div class="casa-modal-miniaturas" id="casaModalMiniaturas" hidden></div>
+    </div>
+  </div>
+</div>
+
+<script src="cliente.js?v=1"></script>
+</body>
+</html>

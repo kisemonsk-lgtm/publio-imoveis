@@ -10,8 +10,28 @@
 <meta name="color-scheme" content="dark" />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="stylesheet" href="estilo.css?v=10" />
+<link rel="stylesheet" href="estilo-abertura.css?v=1" />
 </head>
 <body>
+
+<!-- ============ TELA INICIAL (abertura) ============ -->
+<div id="abertura" class="abertura" hidden>
+  <span class="abertura-linha" aria-hidden="true"></span>
+  <div class="abertura-po" id="aberturaPo" aria-hidden="true"></div>
+
+  <div class="abertura-conteudo">
+    <div class="abertura-logo">
+      <img src="logo-publio-512.png" alt="Públio Imóveis" />
+    </div>
+    <h1 class="abertura-nome">Públio Imóveis</h1>
+    <p class="abertura-sub">Fichas de imóveis</p>
+    <p class="abertura-frase">Mais que imóveis, realizamos histórias</p>
+
+    <button type="button" id="btnEntrarSistema" class="btn btn-primario btn-entrar">Entrar</button>
+
+    <p class="abertura-pe">Públio Imóveis</p>
+  </div>
+</div>
 
 <header class="topo">
   <div class="topo-inner">
@@ -27,6 +47,7 @@
     <button id="btnAtualizar" class="btn btn-neutro btn-mini" title="Buscar imóveis lançados em outros aparelhos">↻ Atualizar</button>
     <button id="btnAdmin" class="btn btn-neutro btn-mini" title="Somente o dono: dispositivos e permissões">🔒 Área do corretor</button>
     <button id="btnDesenvolvedor" class="btn btn-neutro btn-mini" title="Acesso do dono (usuário e senha)">⚙️ Área do desenvolvedor</button>
+    <a id="btnAreaCliente" class="btn btn-destaque btn-mini" href="cliente.html" target="_blank" rel="noopener" title="Abrir a área do cliente (só as casas, sem nada de administração)">👁️ Área do cliente</a>
   </div>
 </header>
 
@@ -322,6 +343,7 @@
 </main>
 
 <script src="fflate.min.js"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
+<script src="abertura.js?v=1"></script>
 </body>
 </html>

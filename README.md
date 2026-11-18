@@ -8,6 +8,11 @@ com a foto e a descrição. O cliente abre o link, vê o imóvel, **baixa a imag
 
 ## O que ele faz
 
+- **Tela inicial (abertura)**: logo animada, nome dourado e botão **Entrar** — aparece ao abrir o site
+  sem link de ficha (uma vez por sessão do navegador).
+- **Área do cliente** (`cliente.html`): vitrine **somente de consulta**, com busca, filtros por tipo
+  e os imóveis em cartões. Toque no imóvel para ver as fotos grandes e a descrição completa.
+  Não tem cadastro, edição, exclusão nem área do corretor.
 - **Cadastro do imóvel**: título, tipo, finalidade (venda/aluguel), preço, cidade/bairro,
   imagem da casa e descrição completa.
 - **Meus imóveis**: lista com busca, abrir ficha, editar e excluir.
@@ -20,17 +25,26 @@ com a foto e a descrição. O cliente abre o link, vê o imóvel, **baixa a imag
 ## Como usar
 
 1. Abra o `index.html` no navegador (ou publique a pasta em qualquer hospedagem estática).
+   Ao abrir, aparece a tela inicial — clique em **Entrar**.
 2. Cadastre o imóvel e clique em **Salvar imóvel**.
 3. Em **Meus imóveis**, clique em **Abrir ficha**.
 4. Clique em **Copiar link** e envie para o cliente pelo WhatsApp.
+
+### Para o cliente
+
+Envie o endereço do site terminado em **`/cliente.html`**. Nessa página o cliente vê só as casas
+(foto, preço, local e descrição) e não tem acesso a nada de administração.
+No painel do corretor, o botão **👁️ Área do cliente** abre essa página para conferência.
 
 ## Arquivos
 
 | Arquivo | Função |
 | --- | --- |
-| `index.html` | Estrutura das duas telas: painel do corretor e ficha do cliente |
+| `index.html` | Estrutura das telas: abertura, painel do corretor, área do corretor e ficha do cliente |
 | `estilo.css` | Tema escuro com dourado |
 | `app.js` | Cadastro, armazenamento local, link compartilhável e botões de copiar |
+| `abertura.js`, `estilo-abertura.css` | Tela inicial animada com a logo e o botão **Entrar** |
+| `cliente.html`, `cliente.js`, `estilo-cliente.css` | Área do cliente: vitrine somente de consulta dos imóveis |
 | `manifest.webmanifest` | Instalação como app no celular |
 | `logo-publio.png`, `logo-publio-512.png` | Logo da Públio Imóveis |
 | `icone-192.png`, `icone-512.png`, `icone-maskable-512.png`, `apple-touch-icon.png` | Ícones do app |

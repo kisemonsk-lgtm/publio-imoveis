@@ -1,0 +1,355 @@
+/* ==========================================================
+   ÁREA DO CLIENTE — só as casas, nada mais
+   ----------------------------------------------------------
+   É uma página separada (cliente.html). Ela NÃO usa o app do
+   corretor: fala direto com a nuvem (Supabase) e só consegue
+   LER. Não existe aqui cadastro, edição, exclusão, área do
+   corretor nem nada de administração.
+   Se a nuvem não estiver configurada, mostra uma mensagem
+   amigável em vez de quebrar.
+   ========================================================== */
+(function () {
+  "use strict";
+
+  var SUPABASE = {
+    url: "https://mefhqkjrszvrjztqdlqe.supabase.co",
+    chave: "sb_publishable_Y_WmSLQXSke0v2O9P8swgw_9uS5tt_P",
+    tabela: "imoveis"
+  };
+  var CAMPOS = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
+  var INTERVALO = 60000;      // busca novidades na nuvem a cada 1 minuto
+
+  var imoveis = [];
+  var filtro = "";
+  var tipoAtual = "";
+  var buscando = false;
+
+  /* ---------------- utilidades ---------------- */
+  function $(sel) { return document.querySelector(sel); }
+  function escapar(t) {
+    return String(t == null ? "" : t)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+  function fmtPreco(valor) {
+    var t = String(valor || "").trim();
+    if (!t) return "";
+    var num = Number(t.replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(",", "."));
+    if (!isFinite(num) || num <= 0) return t;
+    return num.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+  }
+  function imagensDe(im) {
+    if (!im) return [];
+    if (Array.isArray(im.imagens) && im.imagens.length) return im.imagens.filter(Boolean);
+    return im.imagem ? [im.imagem] : [];
+  }
+  function nuvemAtiva() { return !!(SUPABASE.url && SUPABASE.chave); }
+  function sbHeaders() {
+    return {
+      "apikey": SUPABASE.chave,
+      "Authorization": "Bearer " + SUPABASE.chave,
+      "Content-Type": "application/json"
+    };
+  }
+  function sbUrl(caminho) { return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho; }
+
+  /* ---------------- leitura (só GET) ---------------- */
+  function lerImoveis() {
+    var url = sbUrl(SUPABASE.tabela + "?select=" + CAMPOS + "&limit=500");
+    return fetch(url, { headers: sbHeaders(), cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("servidor respondeu " + r.status);
+      return r.json();
+    }).then(function (linhas) {
+      return (linhas || []).map(function (l) {
+        return {
+          id: String(l.id),
+          titulo: l.titulo || "",
+          tipo: l.tipo || "",
+          finalidade: l.finalidade || "",
+          preco: l.preco || "",
+          local: l.local || "",
+          descricao: l.descricao || "",
+          imagem: l.imagem || "",
+          imagens: Array.isArray(l.imagens) ? l.imagens.filter(Boolean) : (l.imagem ? [l.imagem] : []),
+          criadoEm: Number(l.criadoEm) || 0,
+          atualizadoEm: Number(l.atualizadoEm) || 0
+        };
+      });
+    });
+  }
+
+  /* imóveis que o corretor apagou não aparecem para o cliente */
+  function lerApagados() {
+    var url = sbUrl("imoveis_apagados?select=id&limit=1000");
+    return fetch(url, { headers: sbHeaders(), cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (linhas) { return (linhas || []).map(function (l) { return String(l.id); }); })
+      .catch(function () { return []; });
+  }
+
+  function carregar(mostrarCarregando) {
+    if (buscando) return Promise.resolve();
+    buscando = true;
+    if (mostrarCarregando) mostrarAviso("carregando", "Buscando os imóveis...");
+
+    if (!nuvemAtiva()) {
+      buscando = false;
+      imoveis = [];
+      renderizar();
+      mostrarAviso("erro", "A lista de imóveis ainda não foi ligada. Fale com o corretor.");
+      return Promise.resolve();
+    }
+
+    return Promise.all([lerImoveis(), lerApagados()])
+      .then(function (res) {
+        var apagados = {};
+        res[1].forEach(function (id) { apagados[id] = true; });
+        imoveis = res[0].filter(function (im) { return !apagados[im.id]; });
+        esconderAviso();
+        renderizar();
+      })
+      .catch(function (e) {
+        if (!imoveis.length) {
+          mostrarAviso("erro", "Não consegui carregar os imóveis agora. Verifique a internet e toque em tentar de novo.");
+        } else {
+          mostrarAviso("offline", "Sem conexão com a nuvem — mostrando a última lista carregada.");
+        }
+      })
+      .then(function () { buscando = false; });
+  }
+
+  /* ---------------- tela ---------------- */
+  function mostrarAviso(tipo, texto) {
+    var caixa = $("#avisoCliente");
+    if (!caixa) return;
+    caixa.hidden = false;
+    caixa.className = "cliente-aviso " + (tipo || "");
+    caixa.innerHTML = '<span>' + escapar(texto) + "</span>" +
+      (tipo === "erro" ? '<button type="button" class="btn btn-neutro btn-mini" id="btnTentarDeNovo">↻ Tentar de novo</button>' : "");
+    var b = document.getElementById("btnTentarDeNovo");
+    if (b) b.addEventListener("click", function () { carregar(true); });
+  }
+  function esconderAviso() {
+    var caixa = $("#avisoCliente");
+    if (caixa) { caixa.hidden = true; caixa.innerHTML = ""; }
+  }
+
+  function passaNoFiltro(im) {
+    if (tipoAtual && (im.tipo || "") !== tipoAtual) return false;
+    if (!filtro) return true;
+    var alvo = [im.titulo, im.local, im.tipo, im.finalidade, im.descricao].join(" ").toLowerCase();
+    return alvo.indexOf(filtro) !== -1;
+  }
+
+  function cardHTML(im) {
+    var fotos = imagensDe(im);
+    var capa = fotos[0] || "";
+    var info = [im.tipo, im.finalidade].filter(Boolean).join(" • ");
+    var desc = (im.descricao || "").replace(/\s+/g, " ").trim();
+    if (desc.length > 150) desc = desc.slice(0, 150).replace(/\s+\S*$/, "") + "…";
+    return '' +
+      '<article class="casa" data-id="' + escapar(im.id) + '" tabindex="0" role="button" ' +
+        'aria-label="Ver ' + escapar(im.titulo || "imóvel") + '">' +
+        '<div class="casa-foto">' +
+          (capa
+            ? '<img src="' + escapar(capa) + '" alt="' + escapar(im.titulo || "Imóvel") + '" loading="lazy" />'
+            : '<div class="casa-sem-foto">sem foto</div>') +
+          (fotos.length > 1 ? '<span class="casa-fotos">' + fotos.length + ' fotos</span>' : '') +
+          (info ? '<span class="casa-selo">' + escapar(info) + '</span>' : '') +
+        '</div>' +
+        '<div class="casa-corpo">' +
+          '<h3>' + escapar(im.titulo || "Imóvel") + '</h3>' +
+          (im.local ? '<p class="casa-local">📍 ' + escapar(im.local) + '</p>' : '') +
+          (im.preco ? '<p class="casa-preco">' + escapar(fmtPreco(im.preco)) + '</p>' : '') +
+          (desc ? '<p class="casa-desc">' + escapar(desc) + '</p>' : '') +
+        '</div>' +
+      '</article>';
+  }
+
+  function renderizar() {
+    var grade = $("#gradeCasas");
+    var vazio = $("#casasVazio");
+    if (!grade) return;
+
+    var lista = imoveis.filter(passaNoFiltro).sort(function (a, b) {
+      return (b.criadoEm || 0) - (a.criadoEm || 0);
+    });
+
+    grade.innerHTML = lista.map(cardHTML).join("");
+    if (vazio) {
+      vazio.hidden = lista.length > 0;
+      vazio.textContent = imoveis.length
+        ? "Nenhum imóvel encontrado com esse filtro."
+        : "Ainda não há imóveis publicados. Volte em breve.";
+    }
+    var cont = $("#contadorCasas");
+    if (cont) {
+      cont.textContent = lista.length === 1 ? "1 imóvel disponível" : lista.length + " imóveis disponíveis";
+      cont.hidden = !imoveis.length;
+    }
+  }
+
+  /* ---------------- abrir a casa (foto grande + descrição) ---------------- */
+  var casaAberta = null;
+  var fotoAtiva = 0;
+
+  function abrirCasa(id) {
+    var im = imoveis.filter(function (x) { return x.id === id; })[0];
+    if (!im) return;
+    casaAberta = im;
+    fotoAtiva = 0;
+
+    var fotos = imagensDe(im);
+    var modal = $("#casaModal");
+    if (!modal) return;
+
+    $("#casaModalTitulo").textContent = im.titulo || "Imóvel";
+    $("#casaModalLocal").textContent = im.local || "";
+    $("#casaModalEtiqueta").textContent = [im.tipo, im.finalidade].filter(Boolean).join(" • ");
+    $("#casaModalPreco").textContent = im.preco ? fmtPreco(im.preco) : "";
+    $("#casaModalDescricao").textContent = im.descricao || "";
+    $("#casaModalDescricao").hidden = !im.descricao;
+
+    var mini = $("#casaModalMiniaturas");
+    mini.innerHTML = fotos.length > 1
+      ? fotos.map(function (f, i) {
+          return '<button type="button" class="mini-foto' + (i === 0 ? " ativa" : "") + '" data-foto="' + i + '">' +
+                 '<img src="' + escapar(f) + '" alt="Foto ' + (i + 1) + '" loading="lazy" /></button>';
+        }).join("")
+      : "";
+    mini.hidden = fotos.length <= 1;
+
+    pintarFoto(0);
+    modal.hidden = false;
+    document.body.classList.add("casa-aberta");
+    try { $("#casaModalFechar").focus({ preventScroll: true }); } catch (_) {}
+  }
+
+  function pintarFoto(i) {
+    if (!casaAberta) return;
+    var fotos = imagensDe(casaAberta);
+    if (!fotos.length) {
+      $("#casaModalImagem").removeAttribute("src");
+      $("#casaModalImagem").hidden = true;
+      $("#casaModalSemFoto").hidden = false;
+    } else {
+      fotoAtiva = (i + fotos.length) % fotos.length;
+      var img = $("#casaModalImagem");
+      img.hidden = false;
+      img.src = fotos[fotoAtiva];
+      $("#casaModalSemFoto").hidden = true;
+    }
+    var total = fotos.length;
+    $("#setaEsqCasa").hidden = total <= 1;
+    $("#setaDirCasa").hidden = total <= 1;
+    var cont = $("#casaModalContador");
+    cont.hidden = total <= 1;
+    cont.textContent = (fotoAtiva + 1) + " / " + total;
+    var minis = document.querySelectorAll("#casaModalMiniaturas .mini-foto");
+    for (var k = 0; k < minis.length; k++) {
+      minis[k].classList.toggle("ativa", Number(minis[k].dataset.foto) === fotoAtiva);
+    }
+  }
+
+  function fecharCasa() {
+    var modal = $("#casaModal");
+    if (modal) modal.hidden = true;
+    document.body.classList.remove("casa-aberta");
+    casaAberta = null;
+    var img = $("#casaModalImagem");
+    if (img) img.removeAttribute("src");
+  }
+
+  /* ---------------- ligações ---------------- */
+  function ligar() {
+    var grade = $("#gradeCasas");
+    if (grade) {
+      grade.addEventListener("click", function (ev) {
+        var card = ev.target.closest(".casa");
+        if (card) abrirCasa(card.dataset.id);
+      });
+      grade.addEventListener("keydown", function (ev) {
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        var card = ev.target.closest(".casa");
+        if (card) { ev.preventDefault(); abrirCasa(card.dataset.id); }
+      });
+    }
+
+    var busca = $("#buscaCliente");
+    if (busca) {
+      busca.addEventListener("input", function (ev) {
+        filtro = ev.target.value.trim().toLowerCase();
+        renderizar();
+      });
+    }
+
+    var chips = document.querySelectorAll("#tiposCliente .chip");
+    for (var i = 0; i < chips.length; i++) {
+      chips[i].addEventListener("click", function (ev) {
+        var b = ev.currentTarget;
+        tipoAtual = b.dataset.tipo || "";
+        for (var j = 0; j < chips.length; j++) chips[j].classList.toggle("ativo", chips[j] === b);
+        renderizar();
+      });
+    }
+
+    var btnAtualizar = $("#btnAtualizarCliente");
+    if (btnAtualizar) btnAtualizar.addEventListener("click", function () {
+      btnAtualizar.classList.add("girando");
+      carregar(true).then(function () { btnAtualizar.classList.remove("girando"); });
+    });
+
+    var fechar = $("#casaModalFechar");
+    if (fechar) fechar.addEventListener("click", fecharCasa);
+    var fundo = $("#casaModal");
+    if (fundo) fundo.addEventListener("click", function (ev) {
+      if (ev.target === fundo) fecharCasa();
+    });
+    var esq = $("#setaEsqCasa");
+    if (esq) esq.addEventListener("click", function (ev) { ev.stopPropagation(); pintarFoto(fotoAtiva - 1); });
+    var dir = $("#setaDirCasa");
+    if (dir) dir.addEventListener("click", function (ev) { ev.stopPropagation(); pintarFoto(fotoAtiva + 1); });
+    var mini = $("#casaModalMiniaturas");
+    if (mini) mini.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".mini-foto");
+      if (b) pintarFoto(Number(b.dataset.foto));
+    });
+
+    // arrastar a foto no celular
+    var palco = $("#casaModalPalco");
+    if (palco) {
+      var x0 = null, y0 = null;
+      palco.addEventListener("touchstart", function (ev) {
+        x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY;
+      }, { passive: true });
+      palco.addEventListener("touchend", function (ev) {
+        if (x0 === null) return;
+        var dx = ev.changedTouches[0].clientX - x0;
+        var dy = ev.changedTouches[0].clientY - (y0 || 0);
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) pintarFoto(fotoAtiva + (dx < 0 ? 1 : -1));
+        x0 = null; y0 = null;
+      }, { passive: true });
+    }
+
+    document.addEventListener("keydown", function (ev) {
+      if (!casaAberta) return;
+      if (ev.key === "Escape") fecharCasa();
+      if (ev.key === "ArrowLeft") pintarFoto(fotoAtiva - 1);
+      if (ev.key === "ArrowRight") pintarFoto(fotoAtiva + 1);
+    });
+
+    // ao voltar para a aba, busca novidades
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) carregar(false);
+    });
+  }
+
+  function iniciar() {
+    ligar();
+    carregar(true);
+    setInterval(function () { if (!document.hidden && !casaAberta) carregar(false); }, INTERVALO);
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", iniciar);
+  else iniciar();
+})();
