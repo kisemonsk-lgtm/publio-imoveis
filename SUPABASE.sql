@@ -108,3 +108,13 @@ grant usage on schema public to anon, authenticated;
 grant select, insert, update, delete on public.imoveis_apagados to anon, authenticated;
 
 select 'tabela imoveis_apagados criada' as resultado, count(*) as apagados from public.imoveis_apagados;
+
+-- ============================================================
+--  Aparelhos: liberação e cargo (ADM / Funcionário / Só ver)
+--  Rode este trecho se a tabela config_dispositivos já existia.
+-- ============================================================
+
+alter table public.config_dispositivos add column if not exists liberado boolean default false;
+
+-- quem já estava na lista continua com o que tinha; libere os novos pela Área do corretor
+update public.config_dispositivos set liberado = true where liberado is null;

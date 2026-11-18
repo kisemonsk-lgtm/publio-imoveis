@@ -1138,6 +1138,7 @@ async function iniciar() {
 
   try { await iniciarAcesso(); } catch (e) { console.warn("Acesso:", e.message); }
   ligarAdmin();
+  try { await mostrarPedidoSePreciso(); } catch (e) { console.warn("Pedido:", e.message); }
 
   $("#form").addEventListener("submit", salvarForm);
   $("#btnLimpar").addEventListener("click", limparForm);
@@ -1276,6 +1277,8 @@ function mostrarTela(destino) {
   const admin = document.getElementById("admin");
   if (!painel || !ficha) return;
   if (admin) admin.hidden = destino !== "admin";
+  const pedido = document.getElementById("caixaPedido");
+  if (pedido && destino !== "painel") pedido.hidden = true;
   if (destino === "ficha") { painel.hidden = true; ficha.hidden = false; }
   else if (destino === "admin") { painel.hidden = true; ficha.hidden = true; }
   else { ficha.hidden = true; painel.hidden = false; }
@@ -1291,9 +1294,16 @@ function mostrarTela(destino) {
    ========================================================== */
 const CHAVE_ACESSO = "publio-acesso-v1";      // usuário, senha (hash) e sessão
 const CHAVE_DISPOSITIVOS = "publio-dispositivos-v1";
+const CHAVE_PEDIDOS = "publio-pedidos-acesso-v1";
 const ACESSO_PADRAO = { usuario: "admin", senhaHash: "", desde: 0 };
 const SENHA_PADRAO = "publio2026";
 const PERMISSOES_PADRAO = { ver: true, publicar: true, apagar: false };
+const CARGOS = {
+  adm:       { nome: "ADM",        desc: "manda em tudo",                  ver: true, publicar: true, apagar: true },
+  funcionario: { nome: "Funcionário", desc: "só cadastra, não apaga",        ver: true, publicar: true, apagar: false },
+  leitor:    { nome: "Só ver",     desc: "não cadastra nem apaga",        ver: true, publicar: false, apagar: false }
+};
+const CODIGO_VALIDADE = 15 * 60 * 1000;   // o código do aparelho novo vale 15 min
 
 let acesso = null;              // { usuario, senhaHash, desde }
 let sessao = false;             // entrou nesta sessão do navegador?
@@ -1362,13 +1372,14 @@ async function lerDispositivos() {
   if (!NUVEM.ativa) return [];
   try {
     const r = await nuvemFetch(
-      sbUrl("config_dispositivos?select=id,nome,ver,publicar,apagar,vistoEm&order=vistoEm.desc&limit=200"),
+      sbUrl("config_dispositivos?select=id,nome,liberado,ver,publicar,apagar,vistoEm&order=vistoEm.desc&limit=200"),
       { headers: sbHeaders(), cache: "no-store" }
     );
     const linhas = await r.json();
     return (linhas || []).map((l) => ({
       id: String(l.id),
       nome: l.nome || "Aparelho",
+      liberado: l.liberado === true,
       ver: l.ver !== false,
       publicar: l.publicar !== false,
       apagar: l.apagar === true,
@@ -1382,7 +1393,7 @@ async function lerDispositivos() {
 
 async function gravarDispositivo(d) {
   if (!NUVEM.ativa) return false;
-  const linha = { id: d.id, nome: d.nome, ver: !!d.ver, publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now() };
+  const linha = { id: d.id, nome: d.nome, liberado: !!d.liberado, ver: !!d.ver, publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now() };
   await nuvemFetch(sbUrl("config_dispositivos?on_conflict=id"), {
     method: "POST",
     headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
@@ -1402,7 +1413,7 @@ async function registrarAparelho() {
       meu.vistoEm = Date.now();
       await gravarDispositivo(meu);
     } else {
-      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now() }, PERMISSOES_PADRAO));
+      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now(), liberado: false }, PERMISSOES_PADRAO));
     }
   } catch (e) {
     console.warn("Não consegui registrar o aparelho:", e.message);
@@ -1414,7 +1425,20 @@ async function minhasPermissoes() {
   if (sessao) return { ver: true, publicar: true, apagar: true };   // o dono logado manda
   const lista = await lerDispositivos();
   const meu = (lista || dispositivosCache || []).find((d) => d.id === aparelhoId);
-  return meu ? { ver: meu.ver, publicar: meu.publicar, apagar: meu.apagar } : Object.assign({}, PERMISSOES_PADRAO);
+  if (!meu) return Object.assign({}, PERMISSOES_PADRAO);
+  if (!meu.liberado) {
+    // aparelho ainda não aprovado: só vê, não mexe em nada
+    return { ver: true, publicar: false, apagar: false, bloqueado: true };
+  }
+  return { ver: meu.ver, publicar: meu.publicar, apagar: meu.apagar };
+}
+
+/* Diz qual é o cargo do aparelho, para mostrar na tela */
+function cargoDe(d) {
+  if (!d.liberado) return { nome: "Aguardando liberação", classe: "pendente" };
+  if (d.apagar && d.publicar) return { nome: "ADM", classe: "adm" };
+  if (d.publicar) return { nome: "Funcionário", classe: "func" };
+  return { nome: "Só ver", classe: "leitor" };
 }
 
 function ehAdmin() { return sessao === true; }
@@ -1480,15 +1504,28 @@ async function carregarPainelAdmin() {
   }
   dispositivosCache = lista;
   aviso(avisoEl, "");
-  corpo.innerHTML = lista.map((d) => `
-    <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""}">
+  corpo.innerHTML = lista.map((d) => {
+    const cargo = cargoDe(d);
+    const opcoes = Object.keys(CARGOS).map((k) =>
+      `<option value="${k}" ${cargo.classe === (k === "funcionario" ? "func" : k === "leitor" ? "leitor" : "adm") ? "selected" : ""}>${CARGOS[k].nome}</option>`
+    ).join("");
+    const aprovacao = d.liberado ? "" :
+      `<button type="button" class="btn btn-primario btn-mini" data-acao="aprovar">Aprovar</button>`;
+    return `
+    <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""} ${d.liberado ? "" : "pendente"}">
       <td><span class="disp-nome">${escapar(d.nome)}</span>${d.id === aparelhoId ? '<span class="sel-eu">este aparelho</span>' : ''}<span class="disp-id">${d.id.slice(0, 8)}</span></td>
       <td class="disp-data">${d.vistoEm ? quandoFoi(d.vistoEm) : "—"}</td>
-      <td><input type="checkbox" data-perm="ver" ${d.ver ? "checked" : ""} /></td>
-      <td><input type="checkbox" data-perm="publicar" ${d.publicar ? "checked" : ""} /></td>
-      <td><input type="checkbox" data-perm="apagar" ${d.apagar ? "checked" : ""} /></td>
-      <td><button type="button" class="btn btn-perigo btn-mini" data-acao="remover-aparelho">Remover</button></td>
-    </tr>`).join("");
+      <td>
+        ${d.liberado
+          ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
+          : `<span class="selo-cargo pendente">Aguardando liberação</span>`}
+      </td>
+      <td class="acoes-aparelho">
+        ${aprovacao}
+        <button type="button" class="btn btn-perigo btn-mini" data-acao="remover-aparelho">Remover</button>
+      </td>
+    </tr>`;
+  }).join("");
   document.getElementById("dispVazio").hidden = lista.length > 0;
   const nu = document.getElementById("novoUsuario");
   if (nu) nu.value = acesso.usuario;
@@ -1506,25 +1543,99 @@ function quandoFoi(ts) {
   return new Date(ts).toLocaleDateString("pt-BR");
 }
 
-async function mudarPermissao(id, perm, valor) {
+/* Muda o cargo do aparelho: ADM, Funcionário ou Só ver */
+async function aplicarCargo(id, cargo) {
   const lista = dispositivosCache || [];
   const d = lista.find((x) => x.id === id);
-  if (!d) return;
-  if (id === aparelhoId && perm === "apagar" && !valor) {
-    // não deixa o dono se trancar fora sem querer
-    if (!confirm("Tirar a permissão de APAGAR deste aparelho (o seu)? Você não vai mais conseguir excluir imóveis por ele.")) {
+  const def = CARGOS[cargo];
+  if (!d || !def) return;
+  if (id === aparelhoId && cargo !== "adm") {
+    if (!confirm(`Tirar o modo ADM DESTE aparelho (o seu)? Você ainda pode voltar a liberar por aqui, mas perde o botão de excluir enquanto estiver logado.`)) {
       await carregarPainelAdmin();
       return;
     }
   }
-  d[perm] = valor;
+  d.liberado = true;
+  d.ver = def.ver;
+  d.publicar = def.publicar;
+  d.apagar = def.apagar;
   try {
     await gravarDispositivo(d);
-    aviso(document.getElementById("dispAviso"), "Permissões salvas.");
+    aviso(document.getElementById("dispAviso"), `Aparelho "${d.nome}" agora é ${def.nome}.`);
+    await carregarPainelAdmin();
   } catch (e) {
     aviso(document.getElementById("dispAviso"), "Não consegui salvar: " + e.message, true);
     await carregarPainelAdmin();
   }
+}
+
+/* Aprova um aparelho que pediu acesso */
+async function aprovarAparelho(id, cargo = "funcionario") {
+  await aplicarCargo(id, cargo);
+}
+
+/* O corretor digita o código que aparece no outro aparelho e libera na hora */
+async function adicionarAparelhoPorCodigo() {
+  const campo = document.getElementById("codigoAparelho");
+  const sel = document.getElementById("cargoNovo");
+  const avisoEl = document.getElementById("dispAviso");
+  const codigo = (campo ? campo.value : "").trim().toUpperCase();
+  if (!codigo) { aviso(avisoEl, "Digite o código que aparece no outro aparelho.", true); return; }
+  const pedidos = lerJSON(CHAVE_PEDIDOS, {});
+  const pedido = pedidos[codigo];
+  if (!pedido) { aviso(avisoEl, "Código não encontrado. Confira se o outro aparelho abriu o site e mostrou o código.", true); return; }
+  if (Date.now() - (pedido.criadoEm || 0) > CODIGO_VALIDADE) {
+    aviso(avisoEl, "Esse código já venceu (vale 15 minutos). Peça para o outro aparelho gerar outro.", true);
+    return;
+  }
+  const lista = dispositivosCache || [];
+  const jaExiste = lista.find((x) => x.id === pedido.id);
+  const cargo = (sel && sel.value) || "funcionario";
+  const def = CARGOS[cargo];
+  const d = jaExiste || { id: pedido.id, nome: pedido.nome, vistoEm: pedido.criadoEm };
+  d.liberado = true; d.ver = def.ver; d.publicar = def.publicar; d.apagar = def.apagar;
+  try {
+    await gravarDispositivo(d);
+    delete pedidos[codigo];
+    gravarJSON(CHAVE_PEDIDOS, pedidos);
+    if (campo) campo.value = "";
+    aviso(avisoEl, `Aparelho "${d.nome}" liberado como ${def.nome}.`);
+    await carregarPainelAdmin();
+  } catch (e) {
+    aviso(avisoEl, "Não consegui salvar: " + e.message, true);
+  }
+}
+
+/* ---------- Pedido de acesso (aparelho que ainda não foi liberado) ---------- */
+function gerarCodigoPedido() {
+  const letras = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let c = "";
+  for (let i = 0; i < 6; i++) c += letras[Math.floor(Math.random() * letras.length)];
+  return c;
+}
+
+function garantirPedido() {
+  const pedidos = lerJSON(CHAVE_PEDIDOS, {});
+  let codigo = localStorage.getItem(CHAVE_PEDIDOS + "-meu") || "";
+  const p = pedidos[codigo];
+  if (!codigo || !p || Date.now() - (p.criadoEm || 0) > CODIGO_VALIDADE) {
+    codigo = gerarCodigoPedido();
+    pedidos[codigo] = { id: aparelhoId, nome: aparelhoNome, criadoEm: Date.now() };
+    gravarJSON(CHAVE_PEDIDOS, pedidos);
+    try { localStorage.setItem(CHAVE_PEDIDOS + "-meu", codigo); } catch (_) {}
+  }
+  return codigo;
+}
+
+async function mostrarPedidoSePreciso() {
+  const caixa = document.getElementById("caixaPedido");
+  if (!caixa) return;
+  const perms = await minhasPermissoes();
+  const pendente = !sessao && (perms.bloqueado || !perms.publicar && !perms.apagar);
+  if (!pendente || location.hash) { caixa.hidden = true; return; }
+  const codigo = garantirPedido();
+  document.getElementById("codigoMeuAparelho").textContent = codigo;
+  caixa.hidden = false;
 }
 
 async function removerAparelho(id) {
@@ -1575,16 +1686,37 @@ function ligarAdmin() {
   const corpo = document.getElementById("listaDispositivos");
   if (corpo) {
     corpo.addEventListener("change", (ev) => {
-      const cb = ev.target.closest("input[data-perm]");
-      if (!cb) return;
-      const id = cb.closest("tr").dataset.id;
-      mudarPermissao(id, cb.dataset.perm, cb.checked);
+      const sel = ev.target.closest("select[data-acao='cargo']");
+      if (!sel) return;
+      aplicarCargo(sel.closest("tr").dataset.id, sel.value);
     });
     corpo.addEventListener("click", (ev) => {
-      const b = ev.target.closest("button[data-acao='remover-aparelho']");
-      if (b) removerAparelho(b.closest("tr").dataset.id);
+      const b = ev.target.closest("button[data-acao]");
+      if (!b) return;
+      const id = b.closest("tr").dataset.id;
+      if (b.dataset.acao === "remover-aparelho") removerAparelho(id);
+      else if (b.dataset.acao === "aprovar") aprovarAparelho(id, "funcionario");
     });
   }
+
+  const bAdd = document.getElementById("btnAdicionarAparelho");
+  if (bAdd) bAdd.addEventListener("click", adicionarAparelhoPorCodigo);
+  const bPedir = document.getElementById("btnPedirAcesso");
+  if (bPedir) bPedir.addEventListener("click", async () => {
+    await sincronizar();
+    await registrarAparelho();
+    const codigo = garantirPedido();
+    document.getElementById("codigoMeuAparelho").textContent = codigo;
+    aviso(document.getElementById("avisoPedido"), "Pedido enviado. Aguarde o corretor liberar este aparelho.");
+  });
+  const bAtualizarPedido = document.getElementById("btnAtualizarPedido");
+  if (bAtualizarPedido) bAtualizarPedido.addEventListener("click", async () => {
+    await sincronizar();
+    await mostrarPedidoSePreciso();
+    const perms = await minhasPermissoes();
+    if (perms.publicar || perms.apagar) aviso(document.getElementById("avisoPedido"), "Liberado! Já pode usar o site.");
+    else aviso(document.getElementById("avisoPedido"), "Ainda aguardando liberação do corretor.");
+  });
 }
 
 

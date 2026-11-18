@@ -608,3 +608,66 @@ input:focus, select:focus, textarea:focus {
   margin-left: 6px;
   vertical-align: middle;
 }
+
+/* ---------- Adicionar aparelho e cargos ---------- */
+.adicionar-aparelho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px;
+  margin: 6px 0 14px;
+  border: 1px dashed var(--borda);
+  border-radius: 11px;
+  background: rgba(212, 175, 55, .04);
+}
+.adicionar-aparelho .campo { margin: 0; flex: 1 1 180px; }
+.adicionar-aparelho input { letter-spacing: .18em; text-transform: uppercase; font-family: ui-monospace, monospace; }
+.adicionar-aparelho .btn { flex: 0 0 auto; }
+
+.sel-cargo {
+  background: #1a1710;
+  color: var(--texto);
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: .82rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.sel-cargo:focus { outline: none; border-color: var(--ouro-fosco); box-shadow: var(--brilho); }
+
+.selo-cargo {
+  display: inline-block;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.selo-cargo.adm { background: rgba(212, 175, 55, .18); color: var(--ouro-claro); border: 1px solid var(--ouro-fosco); }
+.selo-cargo.func { background: rgba(120, 170, 255, .12); color: #a8c8ff; border: 1px solid #35507a; }
+.selo-cargo.leitor { background: #1a1710; color: var(--texto-suave); border: 1px solid var(--borda); }
+.selo-cargo.pendente { background: rgba(224, 87, 76, .12); color: #ff9d94; border: 1px solid rgba(224, 87, 76, .38); }
+
+.tabela-dispositivos tr.pendente td { background: rgba(224, 87, 76, .05); }
+.acoes-aparelho { white-space: nowrap; display: flex; gap: 6px; }
+
+/* ---------- Pedido de acesso do aparelho novo ---------- */
+.cartao-pedido { max-width: 520px; margin: 24px auto; text-align: center; }
+.cartao-pedido h2 { justify-content: center; }
+.codigo-grande {
+  font-family: ui-monospace, monospace;
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: .28em;
+  color: var(--ouro-claro);
+  background: #100f0b;
+  border: 1px solid var(--ouro-fosco);
+  border-radius: 12px;
+  padding: 14px 8px 14px 18px;
+  margin: 14px 0 18px;
+}
+.cartao-pedido .acoes-form { justify-content: center; }

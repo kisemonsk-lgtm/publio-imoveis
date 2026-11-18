@@ -104,6 +104,17 @@
       </div>
 
     </div>
+
+    <!-- aparelho ainda não liberado: mostra o código para o corretor aprovar -->
+    <div id="caixaPedido" class="cartao cartao-pedido" hidden>
+      <h2>Este aparelho ainda não foi liberado</h2>
+      <p class="admin-sub">Mostre este código ao corretor (ou digite na Área do corretor de outro aparelho) para liberar o uso aqui.</p>
+      <p class="codigo-grande" id="codigoMeuAparelho">------</p>
+      <div class="acoes-form">
+        <button type="button" class="btn btn-primario" id="btnAtualizarPedido">↻ Já fui liberado</button>
+      </div>
+      <p id="avisoPedido" class="aviso" hidden></p>
+    </div>
   </section>
 
   <!-- ============ ÁREA DO CORRETOR (só com usuário e senha) ============ -->
@@ -138,15 +149,29 @@
         </div>
         <p class="admin-sub">Marque o que cada aparelho pode fazer. Quem não tem <b>apagar</b> não consegue excluir imóvel;
           quem não tem <b>publicar</b> não consegue cadastrar nem enviar imóvel para os outros.</p>
+        <div class="adicionar-aparelho">
+          <label class="campo">
+            <span>Código do outro aparelho</span>
+            <input id="codigoAparelho" type="text" maxlength="6" placeholder="Ex.: K7QP2M" autocapitalize="characters" />
+          </label>
+          <label class="campo">
+            <span>Entrar como</span>
+            <select id="cargoNovo">
+              <option value="funcionario" selected>Funcionário (cadastra, não apaga)</option>
+              <option value="adm">ADM (manda em tudo)</option>
+              <option value="leitor">Só ver</option>
+            </select>
+          </label>
+          <button type="button" class="btn btn-primario" id="btnAdicionarAparelho">+ Adicionar aparelho</button>
+        </div>
+
         <div class="tabela-dispositivos">
           <table>
             <thead>
               <tr>
                 <th>Aparelho</th>
                 <th>Visto por último</th>
-                <th>Ver</th>
-                <th>Publicar</th>
-                <th>Apagar</th>
+                <th>Cargo</th>
                 <th></th>
               </tr>
             </thead>
