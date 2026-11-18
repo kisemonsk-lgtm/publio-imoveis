@@ -577,36 +577,74 @@ async function acaoLista(ev) {
 }
 
 /* ---------------- Ficha ---------------- */
-function mostrarFotoFicha(indice) {
+/* Duas camadas de imagem: a nova entra por cima com fade + leve deslize */
+function pintarFoto(src, direcao) {
+  const alvo = document.getElementById("fichaImagem");
+  if (!alvo) return;
+
+  const aplicar = () => {
+    alvo.classList.remove("troca-esq", "troca-dir");
+    void alvo.offsetWidth;
+    if (direcao === "esq") alvo.classList.add("troca-esq");
+    if (direcao === "dir") alvo.classList.add("troca-dir");
+    alvo.classList.add("visivel");
+  };
+
+  if (alvo.getAttribute("src") === src) {
+    aplicar();
+    return;
+  }
+  // pré-carrega: a troca só acontece quando a foto já está pronta (sem piscar)
+  const pre = new Image();
+  pre.onload = () => {
+    alvo.src = src;
+    if (alvo.decode) alvo.decode().then(aplicar).catch(aplicar); else aplicar();
+  };
+  pre.onerror = () => {
+    alvo.src = src;
+    aplicar();
+  };
+  pre.src = src;
+}
+
+function mostrarFotoFicha(indice, forcar) {
   const box = $("#ficha");
   const fotos = box._fotos || [];
   if (!fotos.length) return;
-  const i = Math.max(0, Math.min(fotos.length - 1, indice));
+  const total = fotos.length;
+  let i = Number(indice) || 0;
+  i = total > 1 ? ((i % total) + total) % total : 0;
+  if (!forcar && i === box._fotoAtiva && box._pintou) return;
+  const anterior = box._fotoAtiva || 0;
   box._fotoAtiva = i;
-
-  const img = $("#fichaImagem");
-  img.src = fotos[i];
-  img.style.display = "";
-
+  box._pintou = true;
+  const direcao = i > anterior ? "dir" : (i < anterior ? "esq" : "");
+  pintarFoto(fotos[i], direcao);
   const cont = $("#contadorFotos");
   if (cont) {
-    cont.textContent = fotos.length > 1 ? `${i + 1} / ${fotos.length}` : "";
-    cont.hidden = fotos.length <= 1;
+    cont.textContent = total > 1 ? (i + 1) + " / " + total : "";
+    cont.hidden = total <= 1;
   }
   document.querySelectorAll("#miniaturasFicha .thumb").forEach((el, k) => {
-    el.classList.toggle("ativa", k === i);
+    const ativa = k === i;
+    el.classList.toggle("ativa", ativa);
+    if (ativa && el.scrollIntoView) {
+      try { el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" }); } catch (_) {}
+    }
   });
-
-  // baixar e copiar seguem a foto que está na tela
   const a = $("#btnBaixarImagem");
   if (a) {
-    const suf = fotos.length > 1 ? `-${i + 1}` : "";
+    const suf = total > 1 ? "-" + (i + 1) : "";
     a.href = fotos[i];
     a.download = nomeArquivo(box._imovel || {}).replace(/\.jpg$/, "") + suf + ".jpg";
     a.style.display = "";
+    a.textContent = total > 1 ? "⬇ Baixar esta foto (" + (i + 1) + "/" + total + ")" : "⬇ Baixar imagem";
   }
-  const btnCopia = document.getElementById("btnCopiarFoto");
-  if (btnCopia) btnCopia.style.display = "";
+  const btnTodas = document.getElementById("btnBaixarTodas");
+  if (btnTodas) {
+    btnTodas.style.display = total > 1 ? "" : "none";
+    btnTodas.textContent = "⬇ Baixar todas (" + total + ") .zip";
+  }
 }
 
 function montarGaleria(im) {
@@ -614,31 +652,33 @@ function montarGaleria(im) {
   const box = $("#ficha");
   box._fotos = fotos;
   box._fotoAtiva = 0;
-
+  box._pintou = false;
+  const alvoImg = document.getElementById("fichaImagem");
+  if (alvoImg) {
+    alvoImg.classList.remove("visivel", "troca-esq", "troca-dir");
+    alvoImg.removeAttribute("src");
+    alvoImg.style.display = "";
+  }
   const mini = $("#miniaturasFicha");
   if (mini) {
     mini.innerHTML = fotos.length > 1
-      ? fotos.map((src, i) => `<button type="button" class="thumb" data-foto="${i}"><img src="${src}" alt="Foto ${i + 1}" /></button>`).join("")
+      ? fotos.map((src, i) => "<button type=\"button\" class=\"thumb" + (i === 0 ? " ativa" : "") + "\" data-foto=\"" + i + "\"><img src=\"" + src + "\" alt=\"Foto " + (i + 1) + "\" /></button>").join("")
       : "";
     mini.hidden = fotos.length <= 1;
   }
-
   const setaEsq = $("#setaEsq"), setaDir = $("#setaDir");
   if (setaEsq && setaDir) {
     setaEsq.hidden = fotos.length <= 1;
     setaDir.hidden = fotos.length <= 1;
   }
-
   if (fotos.length) {
-    mostrarFotoFicha(0);
+    mostrarFotoFicha(0, true);
   } else {
-    const img = $("#fichaImagem");
-    img.removeAttribute("src");
-    img.style.display = "none";
+    if (alvoImg) alvoImg.style.display = "none";
     const a = $("#btnBaixarImagem");
     if (a) a.style.display = "none";
-    const btnCopia = document.getElementById("btnCopiarFoto");
-    if (btnCopia) btnCopia.style.display = "none";
+    const btnTodasVazio = document.getElementById("btnBaixarTodas");
+    if (btnTodasVazio) btnTodasVazio.style.display = "none";
     if (mini) mini.hidden = true;
     if (setaEsq) setaEsq.hidden = true;
     if (setaDir) setaDir.hidden = true;
@@ -646,7 +686,6 @@ function montarGaleria(im) {
     if (cont) cont.hidden = true;
   }
 }
-
 function abrirFicha(im, somenteLeitura) {
   $("#painel").hidden = true;
   $("#ficha").hidden = false;
@@ -733,6 +772,56 @@ function blobParaPng(blob) {
     img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
     img.src = url;
   });
+}
+
+/* Baixa todas as fotos do imóvel em um único arquivo ZIP (abre no WinRAR, 7-Zip, celular) */
+async function baixarTodasFotos() {
+  const im = $("#ficha")._imovel;
+  const fotos = $("#ficha")._fotos || [];
+  if (!im || !fotos.length) return;
+
+  const btn = document.getElementById("btnBaixarTodas");
+  const textoOriginal = btn ? btn.textContent : "";
+  if (btn) { btn.disabled = true; btn.textContent = "Preparando..."; }
+
+  try {
+    if (typeof fflate === "undefined") throw new Error("compactador não carregou");
+
+    const base = (im.titulo || "imovel")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "imovel";
+
+    const arquivos = {};
+    fotos.forEach((dataUrl, i) => {
+      const partes = String(dataUrl).split(",");
+      const bin = atob(partes[1] || "");
+      const bytes = new Uint8Array(bin.length);
+      for (let k = 0; k < bin.length; k++) bytes[k] = bin.charCodeAt(k);
+      const nome = `${base}-${String(i + 1).padStart(2, "0")}.jpg`;
+      arquivos[nome] = [bytes, { level: 0 }];   // JPEG já é comprimido
+    });
+
+    // ficha.txt com a descrição junto das fotos
+    const fichaTxt = textoDoImovel(im) + "\n\nPúblio Imóveis — mais que imóveis, realizamos histórias\n";
+    arquivos["ficha-do-imovel.txt"] = [fflate.strToU8(fichaTxt), { level: 6 }];
+
+    const zip = fflate.zipSync(arquivos, { level: 0 });
+    const blob = new Blob([zip], { type: "application/zip" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${base}-fotos.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+
+    aviso($("#avisoFicha"), `${fotos.length} foto(s) baixadas em ${base}-fotos.zip (abra com o WinRAR ou 7-Zip).`);
+  } catch (e) {
+    aviso($("#avisoFicha"), "Não consegui gerar o arquivo: " + e.message, true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal || "⬇ Baixar todas (.zip)"; }
+  }
 }
 
 /* ---------------- Roteamento ---------------- */
@@ -824,21 +913,28 @@ async function iniciar() {
   if (mini) mini.addEventListener("click", acoesMiniaturas);
 
   // galeria da ficha: setas, miniaturas e arrastar no celular
-  $("#setaEsq").addEventListener("click", () => mostrarFotoFicha(($("#ficha")._fotoAtiva || 0) - 1));
-  $("#setaDir").addEventListener("click", () => mostrarFotoFicha(($("#ficha")._fotoAtiva || 0) + 1));
-  $("#miniaturasFicha").addEventListener("click", (ev) => {
+  const passo = (d) => mostrarFotoFicha(($("#ficha")._fotoAtiva || 0) + d);
+  const bEsq = document.getElementById("setaEsq");
+  const bDir = document.getElementById("setaDir");
+  if (bEsq) bEsq.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); passo(-1); });
+  if (bDir) bDir.addEventListener("click", (ev) => { ev.preventDefault(); ev.stopPropagation(); passo(1); });
+  const btnBaixarTodas = document.getElementById("btnBaixarTodas");
+  if (btnBaixarTodas) btnBaixarTodas.addEventListener("click", baixarTodasFotos);
+  const miniFicha = document.getElementById("miniaturasFicha");
+  if (miniFicha) miniFicha.addEventListener("click", (ev) => {
     const t = ev.target.closest(".thumb");
     if (t) mostrarFotoFicha(Number(t.dataset.foto));
   });
-  let toqueX = null;
-  const wrap = document.querySelector(".ficha-imagem-wrap");
-  if (wrap) {
-    wrap.addEventListener("touchstart", (ev) => { toqueX = ev.touches[0].clientX; }, { passive: true });
-    wrap.addEventListener("touchend", (ev) => {
+  let toqueX = null, toqueY = null;
+  const palcoEl = document.getElementById("galeria");
+  if (palcoEl) {
+    palcoEl.addEventListener("touchstart", (ev) => { toqueX = ev.touches[0].clientX; toqueY = ev.touches[0].clientY; }, { passive: true });
+    palcoEl.addEventListener("touchend", (ev) => {
       if (toqueX === null) return;
       const dx = ev.changedTouches[0].clientX - toqueX;
-      if (Math.abs(dx) > 45) mostrarFotoFicha(($("#ficha")._fotoAtiva || 0) + (dx < 0 ? 1 : -1));
-      toqueX = null;
+      const dy = ev.changedTouches[0].clientY - (toqueY || 0);
+      if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) passo(dx < 0 ? 1 : -1);
+      toqueX = null; toqueY = null;
     }, { passive: true });
   }
   document.addEventListener("keydown", (ev) => {
