@@ -1548,6 +1548,8 @@ async function carregarPainelAdmin() {
   }).join("");
   document.getElementById("dispVazio").hidden = lista.length > 0;
   renderUsuarios();
+  const bNovo = document.getElementById("btnNovoUsuario");
+  if (bNovo) bNovo.hidden = !podeGerenciarUsuarios();
 }
 
 function escapar(t) {
@@ -1677,13 +1679,35 @@ function gravarUsuarios() {
   gravarJSON(CHAVE_ACESSO, usuarios);
 }
 
+const CARGOS_USUARIO = {
+  adm:          { nome: "ADM",          criaUsuarios: true,  tudo: true },
+  desenvolvedor: { nome: "Desenvolvedor", criaUsuarios: true,  tudo: false },
+  funcionario:  { nome: "Funcionário",  criaUsuarios: false, tudo: false }
+};
+
 function nomeDoCargoUsuario(c) {
-  return c === "adm" ? "ADM" : "Funcionário";
+  return (CARGOS_USUARIO[c] || CARGOS_USUARIO.funcionario).nome;
+}
+
+/* Quem está logado pode criar/remover usuários? (ADM e Desenvolvedor) */
+function podeGerenciarUsuarios() {
+  const c = acesso && acesso.cargo ? acesso.cargo : "adm";
+  return !!(CARGOS_USUARIO[c] && CARGOS_USUARIO[c].criaUsuarios);
+}
+
+/* Quem está logado é ADM de verdade (manda em tudo)? */
+function ehAdminDeVerdade() {
+  const c = acesso && acesso.cargo ? acesso.cargo : "adm";
+  return !!(CARGOS_USUARIO[c] && CARGOS_USUARIO[c].tudo);
 }
 
 /* Adiciona um usuário novo (ou troca a senha de um que já existe) */
 async function salvarCredenciais() {
   const avisoEl = document.getElementById("senhaAviso");
+  if (!podeGerenciarUsuarios()) {
+    aviso(avisoEl, "Só ADM ou Desenvolvedor podem criar e alterar usuários.", true);
+    return;
+  }
   const u = (document.getElementById("novoUsuario").value || "").trim();
   const s1 = document.getElementById("novaSenha").value || "";
   const s2 = document.getElementById("novaSenha2").value || "";
@@ -1716,6 +1740,10 @@ async function salvarCredenciais() {
 
 /* Abre o formulário de usuário (novo ou troca de senha) */
 function abrirFormUsuario(nome) {
+  if (!podeGerenciarUsuarios()) {
+    aviso(document.getElementById("senhaAviso"), "Só ADM ou Desenvolvedor podem criar e alterar usuários.", true);
+    return;
+  }
   const box = document.getElementById("formUsuario");
   const titulo = document.getElementById("formUsuarioTitulo");
   if (!box) return;
@@ -1748,7 +1776,7 @@ function renderUsuarios() {
   corpo.innerHTML = usuarios.map((u) => `
     <tr data-usuario="${escapar(u.usuario)}">
       <td><span class="disp-nome">${escapar(u.usuario)}</span>${acesso && acesso.usuario === u.usuario ? '<span class="sel-eu">logado agora</span>' : ''}</td>
-      <td><span class="selo-cargo ${u.cargo === "adm" ? "adm" : "func"}">${nomeDoCargoUsuario(u.cargo)}</span></td>
+      <td><span class="selo-cargo ${u.cargo === "adm" ? "adm" : u.cargo === "desenvolvedor" ? "dev" : "func"}">${nomeDoCargoUsuario(u.cargo)}</span></td>
       <td class="disp-data">${u.desde ? quandoFoi(u.desde) : "—"}</td>
       <td class="acoes-aparelho">
         <button type="button" class="btn btn-neutro btn-mini" data-acao="trocar-senha">Trocar senha</button>
@@ -1760,8 +1788,16 @@ function renderUsuarios() {
 }
 
 async function removerUsuario(nome) {
+  if (!podeGerenciarUsuarios()) {
+    aviso(document.getElementById("senhaAviso"), "Só ADM ou Desenvolvedor podem remover usuários.", true);
+    return;
+  }
   const alvo = usuarios.find((x) => x.usuario === nome);
   if (!alvo) return;
+  if (alvo.cargo === "adm" && !ehAdminDeVerdade()) {
+    aviso(document.getElementById("senhaAviso"), "Só um ADM pode remover outro ADM.", true);
+    return;
+  }
   if (usuarios.length === 1) { aviso(document.getElementById("senhaAviso"), "Não dá para remover o último usuário.", true); return; }
   if (!confirm(`Remover o usuário "${nome}"? Ele não vai mais conseguir entrar na Área do corretor.`)) return;
   usuarios = usuarios.filter((x) => x.usuario !== nome);
@@ -1772,6 +1808,11 @@ async function removerUsuario(nome) {
 }
 
 function trocarSenhaDe(nome) {
+  const alvo = usuarios.find((x) => x.usuario === nome);
+  if (alvo && alvo.cargo === "adm" && !ehAdminDeVerdade()) {
+    aviso(document.getElementById("senhaAviso"), "Só um ADM pode trocar a senha de outro ADM.", true);
+    return;
+  }
   abrirFormUsuario(nome);
 }
 

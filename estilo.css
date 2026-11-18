@@ -683,3 +683,4 @@ input:focus, select:focus, textarea:focus {
 }
 @keyframes surgir { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 .form-usuario .rotulo-desc { margin-top: 0; }
+.selo-cargo.dev { background: rgba(140, 220, 160, .12); color: #9ee6b4; border: 1px solid #2f6440; }
