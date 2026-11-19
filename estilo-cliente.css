@@ -587,9 +587,15 @@ body.casa-aberta { overflow: hidden; }
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding: 2px 0 6px;
+  padding: 2px 0 0;
   scrollbar-width: thin;
 }
+/* os dois grupos (finalidade + tipo) na mesma linha, rolando juntos */
+.cliente-finalidades,
+.cliente-tipos {
+  flex-wrap: nowrap;
+}
+#finalidadesCliente { margin-bottom: 0; }
 
 /* ---------- Botão de ampliar (lupa) no canto da foto ---------- */
 .casa-zoom-btn {
