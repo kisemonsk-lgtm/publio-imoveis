@@ -119,17 +119,27 @@ function camposImovel() {
 async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   let ultimo;
   for (let i = 0; i < tentativas; i++) {
+    let r = null;
     try {
-      const r = await fetch(url, opcoes);
+      r = await fetch(url, opcoes);
       if (r.ok) return r;
+      // 4xx é resposta do servidor: devolve a resposta para quem chamou decidir
+      // (ex.: coluna que ainda não existe -> tenta de novo sem ela)
+      if (r.status >= 400 && r.status < 500) return r;
       ultimo = new Error("servidor respondeu " + r.status);
-      if (r.status >= 400 && r.status < 500) break;
     } catch (e) {
       ultimo = new Error("falha de rede (" + (e.message || "conexão recusada") + ")");
     }
     await new Promise((ok) => setTimeout(ok, 400 * (i + 1)));
   }
   throw ultimo || new Error("falha desconhecida");
+}
+
+/* Erro do Supabase (400 etc.) vira exceção — usado em gravar/apagar */
+function exigirOk(r, oQue) {
+  if (r && r.ok) return r;
+  const codigo = r ? r.status : "?";
+  throw new Error((oQue ? oQue + ": " : "") + "servidor respondeu " + codigo);
 }
 
 /* Lê todos os imóveis da nuvem */
@@ -164,10 +174,18 @@ async function nuvemLer() {
 /* Lê um imóvel só pelo id (para o cliente que abre a ficha sem ter a lista) */
 async function nuvemLerUm(id) {
   if (!NUVEM.ativa) return null;
-  const r = await nuvemFetch(
+  let r = await nuvemFetch(
     sbUrl(`${SUPABASE.tabela}?select=${camposImovel()}&id=eq.${encodeURIComponent(id)}&limit=1`),
     { headers: sbHeaders(), cache: "no-store" }
   );
+  if (r.status === 400 && temColunaVideos !== false) {
+    temColunaVideos = false;
+    r = await nuvemFetch(
+      sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_BASE}&id=eq.${encodeURIComponent(id)}&limit=1`),
+      { headers: sbHeaders(), cache: "no-store" }
+    );
+  }
+  if (!r.ok) return null;
   const linhas = await r.json();
   const l = (linhas || [])[0];
   if (!l) return null;
@@ -210,7 +228,7 @@ async function nuvemSalvarUm(im) {
     body: JSON.stringify(linha)
   };
   try {
-    await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), opcoes);
+    exigirOk(await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), opcoes), "salvar imóvel");
     temColunaVideos = true;
   } catch (e) {
     if (!/videos|42703/i.test(e.message)) throw e;
@@ -219,7 +237,7 @@ async function nuvemSalvarUm(im) {
     const semVideos = Object.assign({}, linha);
     delete semVideos.videos;
     console.warn("A coluna 'videos' ainda não existe no Supabase — o imóvel foi salvo sem vídeos. Rode o SUPABASE.sql.");
-    await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), Object.assign({}, opcoes, { body: JSON.stringify(semVideos) }));
+    exigirOk(await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), Object.assign({}, opcoes, { body: JSON.stringify(semVideos) })), "salvar imóvel");
   }
   return true;
 }
@@ -335,6 +353,7 @@ async function nuvemLerApagados() {
   if (!NUVEM.ativa) return [];
   try {
     const r = await nuvemFetch(sbUrl("imoveis_apagados?select=id&limit=1000"), { headers: sbHeaders(), cache: "no-store" });
+    if (!r || !r.ok) return [];
     const linhas = await r.json();
     return (linhas || []).map((l) => String(l.id));
   } catch (e) {
@@ -346,11 +365,11 @@ async function nuvemLerApagados() {
 async function nuvemMarcarApagado(id) {
   if (!NUVEM.ativa) return false;
   try {
-    await nuvemFetch(sbUrl("imoveis_apagados?on_conflict=id"), {
+    exigirOk(await nuvemFetch(sbUrl("imoveis_apagados?on_conflict=id"), {
       method: "POST",
       headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
       body: JSON.stringify({ id: String(id), apagadoEm: Date.now() })
-    });
+    }), "marcar como apagado");
     return true;
   } catch (e) {
     console.warn("Não consegui registrar a exclusão:", e.message);
@@ -750,6 +769,44 @@ function lerDescricao(texto) {
   ];
   for (const [re, nome] of tipos) { if (re.test(t)) { res.tipo = nome; break; } }
 
+  /* ---- bairro ----
+     O bairro costuma ser a PRIMEIRA linha do anúncio, curta e sem frase de venda.
+     Se não for, procura uma linha curta que não fale do imóvel. */
+  const FRASE_VENDA = /\b(completa|confort[áa]vel|pronta|morar|oportunidade|excelente|linda|[óo]tima|maravilh|reformad|amplo|ampla|venha|confira|aceita|financia|documenta[çc][ãa]o|localiza|bem localizad|tranquil|segur|sonho|realidade|novo|nova)\b/i;
+  const FALA_IMOVEL = /\b(casa|casas|apartamento|apto|sobrado|terreno|lote|s[íi]tio|ch[áa]cara|galp[ãa]o|sala|loja|kitnet|flat|studio|im[óo]vel|ch[áa]let|edif[íi]cio|quintal|garagem|piscina|quartos?|su[íi]tes?|vagas?|varanda|sacada|cozinha|banheiros?|m2|m²|metros?)\b/i;
+  const RUA = /\b(rua|avenida|av\.|travessa|alameda|rodovia|estrada|pra[çc]a|km)\b/i;
+
+  function pareceBairro(l, primeiraLinha) {
+    if (!l) return false;
+    const limpo = l.replace(/^(bairro|localiza[çc][ãa]o|endere[çc]o)\s*[:\-–]?\s*/i, "").trim();
+    if (limpo.length < 3 || limpo.length > 46) return false;
+    if (/R\$/.test(l) || /\d{4,}/.test(l)) return false;         // preço
+    if (/\d+\s*(quartos?|su[íi]tes?|vagas?|m2|m²|metros?)/i.test(l)) return false;
+    if (FRASE_VENDA.test(l)) return false;                       // frase de anúncio
+    if (FALA_IMOVEL.test(l) && !primeiraLinha) return false;      // fala do imóvel (fora da 1ª linha)
+    if (RUA.test(l) && /\d/.test(l)) return false;                // rua com número
+    if (/[!?]/.test(l)) return false;
+    const palavras = limpo.split(/\s+/).filter(Boolean).length;
+    if (palavras > 5) return false;
+    return true;
+  }
+
+  let bairroLinha = "";
+  // 1) a primeira linha do anúncio, se ela tem cara de bairro
+  const primeiraLinha = linhas[0] || "";
+  if (pareceBairro(primeiraLinha, true)) bairroLinha = primeiraLinha;
+  // 2) senão, a primeira linha curta que não fale do imóvel
+  if (!bairroLinha) {
+    for (const l of linhas) {
+      if (l === primeiraLinha) continue;
+      if (pareceBairro(l, false)) { bairroLinha = l; break; }
+    }
+  }
+  res.bairro = bairroLinha
+    .replace(/^(bairro|localiza[çc][ãa]o|endere[çc]o)\s*[:\-–]?\s*/i, "")
+    .replace(/\s*[.,;!?]+$/, "")
+    .trim();
+
   /* ---- cidade / bairro ----
      1) linha de endereço: "Rua X, Bairro — Cidade/UF", "Bairro, Cidade"
      2) senão, o lugar citado logo depois de "no/na/em/do/da" numa linha curta
@@ -829,6 +886,22 @@ function lerDescricao(texto) {
   }
   res.local = limpaLocal(local);
 
+  /* A cidade é sempre LEM-BA. O local final fica "BAIRRO — Luís Eduardo Magalhães - BA". */
+  const limpaCidade = (t) => String(t || "")
+    .replace(/\b(Lu[íi]s Eduardo Magalh[ãa]es|LEM)\b/gi, "")
+    .replace(/[-–\/,]?\s*\bBA\b\s*$/i, "")
+    .replace(/^\s*[-–\/,]+\s*|\s*[-–\/,]+\s*$/g, "")
+    .trim();
+
+  let bairroFinal = res.bairro || "";
+  if (!bairroFinal && res.local) {
+    // usa só o pedaço do endereço que não é rua nem frase
+    const pedacos = limpaCidade(res.local).split(/[—–]|\s-\s|\/|,/).map((x) => x.trim()).filter(Boolean);
+    const bom = pedacos.find((x) => !RUA.test(x) && !FRASE_VENDA.test(x) && !FALA_IMOVEL.test(x) && x.length >= 3);
+    bairroFinal = bom || "";
+  }
+  res.local = bairroFinal ? (bairroFinal + " — " + CIDADE_PADRAO) : CIDADE_PADRAO;
+
   /* ---- título ---- */
   const TITULO_OK = (l) => l.length >= 8 && l.length <= 90 && !/R\$\s*\d/i.test(l) &&
     !/^[-–•*]/.test(l) && !/[—–]/.test(l) &&
@@ -837,11 +910,11 @@ function lerDescricao(texto) {
     !/^\d+\s*x\s*\d+/i.test(l) &&
     !/\b(\d+\s*(quartos?|su[íi]tes?|vagas?|banheiros?|m2|m²|metros?|hectares?)\s*(,|e\s+\d|$))/i.test(l) &&
     !/^(documenta[çc][ãa]o|aceita|financia|obs|aten[çc][ãa]o)/i.test(l);
-  const primeira = linhas.find(TITULO_OK);
+  const primeira = linhas.find((l) => TITULO_OK(l) && l !== bairroLinha && !(pareceBairro(l, true) && !FALA_IMOVEL.test(l) && !FRASE_VENDA.test(l)));
   // se a primeira linha "de anúncio" for só um item (ex.: "Quintal e garagem"), prefere a
   // primeira linha que fale de imóvel (casa, apartamento, terreno...) e caiba no título
   const falaDeImovel = /\b(casa|casas|apartamento|apto|sobrado|terreno|lote|s[íi]tio|ch[áa]cara|galp[ãa]o|sala|loja|kitnet|flat|studio|im[óo]vel|ch[áa]let|edif[íi]cio)\b/i;
-  const comImovel = linhas.find((l) => TITULO_OK(l) && falaDeImovel.test(l));
+  const comImovel = linhas.find((l) => TITULO_OK(l) && l !== bairroLinha && falaDeImovel.test(l));
   const escolhida = comImovel || primeira;
   if (escolhida) {
     res.titulo = escolhida.replace(/[.!]+$/, "").trim();
@@ -855,10 +928,19 @@ function lerDescricao(texto) {
 }
 
 /* Preenche os campos escondidos a partir da descrição */
-function aplicarDescricao() {
+function aplicarDescricao(preencherCampos) {
   const texto = $("#f-descricao").value;
   const d = lerDescricao(texto);
   const info = document.getElementById("dadosLidos");
+  // preenche os campos de ajuste (só os que a pessoa não escreveu à mão)
+  if (preencherCampos) {
+    const por = (id, valor) => {
+      const el = document.getElementById(id);
+      if (el && !el.dataset.tocado && valor) el.value = valor;
+    };
+    por("f-preco", d.preco);
+    por("f-local", d.local);
+  }
   if (!d.preco && !d.local && !d.tipo) {
     if (info) info.textContent = "Ainda não achei preço nem cidade na descrição.";
     return d;
@@ -1436,8 +1518,12 @@ async function iniciar() {
       clearTimeout(t);
       t = setTimeout(aplicarDescricao, 400);
     };
-    campoDesc.addEventListener("input", aoDigitar);
-    campoDesc.addEventListener("paste", () => setTimeout(aplicarDescricao, 60));
+    campoDesc.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => aplicarDescricao(true), 400); });
+    campoDesc.addEventListener("paste", () => setTimeout(() => aplicarDescricao(true), 60));
+    for (const id of ["f-preco", "f-local"]) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener("input", () => { el.dataset.tocado = "1"; });
+    }
   }
   $("#btnNovo").addEventListener("click", () => {
     limparForm();
@@ -1658,6 +1744,10 @@ function mostrarTela(destino) {
    enviar imóvel) e apagar imóveis de todos os dispositivos.
    O bloqueio vale no próprio aparelho (é um site sem servidor).
    ========================================================== */
+/* Todas as casas são de Luís Eduardo Magalhães — BA (LEM).
+   O bairro sai da descrição e a cidade entra sozinha. */
+const CIDADE_PADRAO = "Luís Eduardo Magalhães - BA";
+
 const CHAVE_ACESSO = "publio-acesso-v1";      // usuário, senha (hash) e sessão
 const CHAVE_DISPOSITIVOS = "publio-dispositivos-v1";
 const CHAVE_PEDIDOS = "publio-pedidos-acesso-v1";
@@ -2158,7 +2248,9 @@ async function nuvemGravarPedido(codigo, dados) {
 async function nuvemLerPedido(codigo) {
   if (!NUVEM.ativa) return null;
   const r = await nuvemFetch(sbUrl("pedidos_acesso?select=codigo,aparelhoId,nome,criadoEm&codigo=eq." + encodeURIComponent(codigo)));
-  const linha = (r && r[0]) || null;
+  if (!r || !r.ok) return null;
+  const lista = await r.json();
+  const linha = (lista && lista[0]) || null;
   return linha ? { codigo: linha.codigo, id: linha.aparelhoId, nome: linha.nome, criadoEm: Number(linha.criadoEm) || 0 } : null;
 }
 
