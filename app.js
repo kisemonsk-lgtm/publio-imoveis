@@ -1858,14 +1858,25 @@ function detectarNomeAparelho() {
   return sis ? `${tipo} ${sis}` : tipo;
 }
 
+let temColunaCargo = null;   // null = ainda não sei se o banco tem a coluna cargo
+
 /* Lê a lista de aparelhos da nuvem (tabela config_dispositivos) */
 async function lerDispositivos() {
   if (!NUVEM.ativa) return [];
   try {
-    const r = await nuvemFetch(
-      sbUrl("config_dispositivos?select=id,nome,liberado,ver,publicar,apagar,vistoEm&order=vistoEm.desc&limit=200"),
+    const BASE_DISP = "id,nome,liberado,ver,publicar,apagar,vistoEm";
+    let r = await nuvemFetch(
+      sbUrl("config_dispositivos?select=" + BASE_DISP + (temColunaCargo ? ",cargo" : "") + "&order=vistoEm.desc&limit=200"),
       { headers: sbHeaders(), cache: "no-store" }
     );
+    if (r.status === 400 && temColunaCargo !== false) {
+      temColunaCargo = false;   // banco antigo, sem a coluna cargo
+      r = await nuvemFetch(
+        sbUrl("config_dispositivos?select=" + BASE_DISP + "&order=vistoEm.desc&limit=200"),
+        { headers: sbHeaders(), cache: "no-store" }
+      );
+    }
+    if (!r.ok) throw new Error("servidor respondeu " + r.status);
     const linhas = await r.json();
     return (linhas || []).map((l) => ({
       id: String(l.id),
@@ -1874,6 +1885,7 @@ async function lerDispositivos() {
       ver: l.ver !== false,
       publicar: l.publicar !== false,
       apagar: l.apagar === true,
+      cargo: l.cargo || "",
       vistoEm: Number(l.vistoEm) || 0
     }));
   } catch (e) {
@@ -1883,13 +1895,24 @@ async function lerDispositivos() {
 }
 
 async function gravarDispositivo(d) {
-  if (!NUVEM.ativa) return false;
-  const linha = { id: d.id, nome: d.nome, liberado: !!d.liberado, ver: !!d.ver, publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now() };
-  await nuvemFetch(sbUrl("config_dispositivos?on_conflict=id"), {
+  if (!NUVEM.ativa) throw new Error("a nuvem não está configurada");
+  const linha = {
+    id: d.id, nome: d.nome, liberado: !!d.liberado, ver: !!d.ver,
+    publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now(),
+    cargo: d.cargo || (d.apagar && d.publicar ? "adm" : d.publicar ? "funcionario" : "cliente")
+  };
+  if (temColunaCargo === false) delete linha.cargo;
+  const r = await nuvemFetch(sbUrl("config_dispositivos?on_conflict=id"), {
     method: "POST",
     headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify(linha)
   });
+  if (!r.ok) {
+    let detalhe = "";
+    try { detalhe = (await r.json()).message || ""; } catch (_) {}
+    throw new Error("o banco recusou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
+  }
+  temColunaCargo = true;
   return true;
 }
 
@@ -1924,14 +1947,20 @@ async function minhasPermissoes() {
     // nunca mais fica travado: sem liberação o aparelho é cliente (só vê)
     return { ver: true, publicar: false, apagar: false, cliente: true };
   }
-  return { ver: meu.ver, publicar: meu.publicar, apagar: meu.apagar };
+  // se o aparelho tem função definida (Cliente/Funcionário/ADM), ela manda
+  const chave = cargoDe(meu).chave;
+  const def = CARGOS[chave] || CARGOS.leitor;
+  return { ver: def.ver, publicar: def.publicar, apagar: def.apagar };
 }
 
 /* Diz qual é o cargo do aparelho, para mostrar na tela */
 function cargoDe(d) {
-  if (d.apagar && d.publicar) return { nome: "ADM", classe: "adm" };
-  if (d.publicar) return { nome: "Funcionário", classe: "func" };
-  return { nome: "Cliente", classe: "cliente" };   // padrão de todo aparelho novo: só vê
+  if (d.cargo === "adm") return { nome: "ADM", classe: "adm", chave: "adm" };
+  if (d.cargo === "funcionario") return { nome: "Funcionário", classe: "func", chave: "funcionario" };
+  if (d.cargo === "leitor" || d.cargo === "cliente") return { nome: "Cliente", classe: "cliente", chave: "leitor" };
+  if (d.apagar && d.publicar) return { nome: "ADM", classe: "adm", chave: "adm" };
+  if (d.publicar) return { nome: "Funcionário", classe: "func", chave: "funcionario" };
+  return { nome: "Cliente", classe: "cliente", chave: "leitor" };   // padrão de todo aparelho novo: só vê
 }
 
 function ehAdmin() { return sessao === true; }
@@ -2064,7 +2093,7 @@ async function carregarPainelAdmin() {
   corpo.innerHTML = lista.map((d) => {
     const cargo = cargoDe(d);
     const opcoes = Object.keys(CARGOS).map((k) =>
-      `<option value="${k}" ${cargo.classe === (k === "funcionario" ? "func" : k === "leitor" ? "cliente" : "adm") ? "selected" : ""}>${CARGOS[k].nome}</option>`
+      `<option value="${k}" ${cargo.chave === k ? "selected" : ""}>${CARGOS[k].nome}</option>`
     ).join("");
     const podeCargo = podeMudarCargo();
     const aprovacao = "";   // todo aparelho já entra como cliente: não existe mais aprovar
@@ -2124,14 +2153,14 @@ async function aplicarCargo(id, cargo) {
   d.ver = def.ver;
   d.publicar = def.publicar;
   d.apagar = def.apagar;
+  d.cargo = cargo;
   try {
     await gravarDispositivo(d);
     aviso(document.getElementById("dispAviso"), `Aparelho "${d.nome}" agora é ${def.nome}.`);
-    await carregarPainelAdmin();
   } catch (e) {
-    aviso(document.getElementById("dispAviso"), "Não consegui salvar: " + e.message, true);
-    await carregarPainelAdmin();
+    aviso(document.getElementById("dispAviso"), "Não consegui mudar a função: " + e.message, true);
   }
+  await carregarPainelAdmin();
 }
 
 /* Aprova um aparelho que pediu acesso */

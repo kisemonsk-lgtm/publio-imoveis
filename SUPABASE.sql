@@ -172,3 +172,24 @@ update public.config_dispositivos
 update public.config_dispositivos set liberado = true where liberado is null;
 
 select 'aparelhos como cliente' as resultado, count(*) from public.config_dispositivos where liberado;
+
+
+-- ============================================================
+--  Função do aparelho guardada na nuvem
+--  (Cliente / Funcionário / ADM) — usada pelo Modo Desenvolvedor
+-- ============================================================
+
+alter table public.config_dispositivos add column if not exists cargo text default 'cliente';
+
+-- acerta a função de quem já estava na lista, conforme as permissões antigas
+update public.config_dispositivos
+   set cargo = case
+     when apagar and publicar then 'adm'
+     when publicar then 'funcionario'
+     else 'cliente'
+   end
+ where cargo is null or cargo = '';
+
+select 'coluna cargo criada' as resultado,
+       (select count(*) from information_schema.columns
+         where table_schema='public' and table_name='config_dispositivos' and column_name='cargo') as tem_coluna;
