@@ -836,3 +836,64 @@ body.modo-cliente .topo-inner::after {
 /* ficha aberta pelo cliente: esconde qualquer ação de edição */
 body.modo-cliente #ficha .acoes-form,
 body.modo-cliente #ficha .btn-perigo { display: none !important; }
+
+/* ---------------- seletor de cargo com seta ---------------- */
+.celula-cargo { white-space: nowrap; }
+.troca-cargo { position: relative; display: inline-block; }
+.btn-cargo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: #14120c;
+  color: var(--texto);
+  cursor: pointer;
+  font: inherit;
+}
+.btn-cargo:hover { border-color: var(--ouro-fosco); background: #1b1810; }
+.btn-cargo:focus-visible { outline: 2px solid var(--ouro-claro); outline-offset: 2px; }
+.seta-cargo {
+  font-size: .8rem;
+  color: var(--ouro-claro);
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.btn-cargo[aria-expanded="true"] .seta-cargo { transform: rotate(180deg); }
+
+.lista-cargo {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--ouro-fosco);
+  background: #12100b;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .65);
+  display: grid;
+  gap: 2px;
+}
+.lista-cargo[hidden] { display: none; }
+.lista-cargo.para-cima { top: auto; bottom: calc(100% + 6px); }
+.op-cargo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.op-cargo:hover { background: rgba(212, 175, 55, .14); }
+.op-cargo.ativa { background: rgba(212, 175, 55, .20); color: var(--ouro-claro); }
+.op-desc { font-size: .72rem; font-weight: 400; opacity: .65; }

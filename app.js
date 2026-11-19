@@ -2092,18 +2092,26 @@ async function carregarPainelAdmin() {
   aviso(avisoEl, "");
   corpo.innerHTML = lista.map((d) => {
     const cargo = cargoDe(d);
-    const opcoes = Object.keys(CARGOS).map((k) =>
-      `<option value="${k}" ${cargo.chave === k ? "selected" : ""}>${CARGOS[k].nome}</option>`
-    ).join("");
     const podeCargo = podeMudarCargo();
     const aprovacao = "";   // todo aparelho já entra como cliente: não existe mais aprovar
     return `
     <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""} ${d.liberado ? "" : "pendente"}">
       <td><span class="disp-nome">${escapar(d.nome)}</span>${d.id === aparelhoId ? '<span class="sel-eu">este aparelho</span>' : ''}<span class="disp-id">${d.id.slice(0, 8)}</span></td>
       <td class="disp-data">${d.vistoEm ? quandoFoi(d.vistoEm) : "—"}</td>
-      <td>
+      <td class="celula-cargo">
         ${podeCargo
-          ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
+          ? `<div class="troca-cargo">
+               <button type="button" class="btn-cargo" data-acao="abrir-cargo" aria-haspopup="listbox" aria-expanded="false">
+                 <span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>
+                 <span class="seta-cargo" aria-hidden="true">▾</span>
+               </button>
+               <div class="lista-cargo" role="listbox" hidden>
+                 ${Object.keys(CARGOS).map((k) =>
+                   `<button type="button" class="op-cargo${cargo.chave === k ? " ativa" : ""}" role="option" data-cargo="${k}">
+                      ${CARGOS[k].nome}<span class="op-desc">${CARGOS[k].desc || ""}</span>
+                    </button>`).join("")}
+               </div>
+             </div>`
           : `<span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>`}
       </td>
       <td class="acoes-aparelho">
@@ -2469,6 +2477,12 @@ function trocarSenhaDe(nome) {
 }
 
 /* Liga os botões da área do corretor */
+/* fecha as listas de cargo abertas na tabela de aparelhos */
+function fecharListasCargo() {
+  document.querySelectorAll("#listaDispositivos .lista-cargo").forEach((l) => { l.hidden = true; });
+  document.querySelectorAll("#listaDispositivos .btn-cargo").forEach((b) => b.setAttribute("aria-expanded", "false"));
+}
+
 function ligarAdmin() {
   const btnAdmin = document.getElementById("btnAdmin");
   if (btnAdmin) btnAdmin.addEventListener("click", () => abrirAdmin());
@@ -2502,17 +2516,46 @@ function ligarAdmin() {
 
   const corpo = document.getElementById("listaDispositivos");
   if (corpo) {
-    corpo.addEventListener("change", (ev) => {
-      const sel = ev.target.closest("select[data-acao='cargo']");
-      if (!sel) return;
-      aplicarCargo(sel.closest("tr").dataset.id, sel.value);
-    });
     corpo.addEventListener("click", (ev) => {
+      const linha = ev.target.closest("tr");
+      const id = linha ? linha.dataset.id : "";
+
+      // 1) clicou na seta: abre/fecha a lista de cargos daquele aparelho
+      const abrir = ev.target.closest("button[data-acao='abrir-cargo']");
+      if (abrir) {
+        const lista = abrir.parentElement.querySelector(".lista-cargo");
+        const jaAberta = lista && !lista.hidden;
+        fecharListasCargo();
+        if (lista && !jaAberta) {
+          lista.hidden = false;
+          abrir.setAttribute("aria-expanded", "true");
+          const r = abrir.getBoundingClientRect();
+          if (r.bottom > window.innerHeight - 160) lista.classList.add("para-cima");
+        }
+        return;
+      }
+
+      // 2) clicou num cargo da lista: muda a função na hora
+      const op = ev.target.closest("button[data-cargo]");
+      if (op) {
+        fecharListasCargo();
+        aplicarCargo(id, op.dataset.cargo);
+        return;
+      }
+
+      // 3) outros botões da linha
       const b = ev.target.closest("button[data-acao]");
-      if (!b) return;
-      const id = b.closest("tr").dataset.id;
+      if (!b) { fecharListasCargo(); return; }
       if (b.dataset.acao === "remover-aparelho") removerAparelho(id);
       else if (b.dataset.acao === "aprovar") aprovarAparelho(id, "funcionario");
+    });
+
+    // clicou fora: fecha a lista
+    document.addEventListener("click", (ev) => {
+      if (!ev.target.closest(".troca-cargo")) fecharListasCargo();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") fecharListasCargo();
     });
   }
 
