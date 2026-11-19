@@ -9,34 +9,9 @@
 <meta name="theme-color" content="#0c0b09" />
 <meta name="color-scheme" content="dark" />
 <link rel="manifest" href="manifest.webmanifest" />
-<link rel="stylesheet" href="estilo.css?v=17" />
-<link rel="stylesheet" href="estilo-abertura.css?v=11" />
+<link rel="stylesheet" href="estilo.css?v=15" />
 </head>
 <body>
-
-<!-- ============ TELA INICIAL (abertura) ============ -->
-<div id="abertura" class="abertura" hidden>
-  <div class="abertura-brilho" aria-hidden="true"></div>
-  <span class="abertura-linha" aria-hidden="true"></span>
-  <div class="abertura-po" id="aberturaPo" aria-hidden="true"></div>
-
-  <div class="abertura-conteudo">
-    <div class="abertura-porta">
-      <div class="abertura-porta-painel">
-        <div class="abertura-logo">
-          <img src="logo-publio-512.png" alt="Públio Imóveis" />
-        </div>
-        <h1 class="abertura-nome">Públio Imóveis</h1>
-        <p class="abertura-sub">Fichas de imóveis</p>
-        <p class="abertura-frase">Mais que imóveis, realizamos histórias</p>
-
-        <button type="button" id="btnEntrarSistema" class="btn btn-primario btn-entrar">Entrar</button>
-      </div>
-    </div>
-
-    <p class="abertura-pe">Públio Imóveis</p>
-  </div>
-</div>
 
 <header class="topo">
   <div class="topo-inner">
@@ -52,7 +27,7 @@
     <button id="btnAtualizar" class="btn btn-neutro btn-mini" title="Buscar imóveis lançados em outros aparelhos">↻ Atualizar</button>
     <button id="btnAdmin" class="btn btn-neutro btn-mini" title="Somente o dono: dispositivos e permissões">🔒 Área do corretor</button>
     <button id="btnDesenvolvedor" class="btn btn-neutro btn-mini" title="Acesso do dono (usuário e senha)">⚙️ Área do desenvolvedor</button>
-    <a id="btnAreaCliente" class="btn btn-destaque btn-mini" href="publio-cliente.html" target="_blank" rel="noopener" title="Abrir a Públio Cliente (só as casas, sem nada de administração)">👁️ Públio Cliente</a>
+    <a id="btnAreaCliente" class="btn btn-destaque btn-mini" href="publio-cliente.html" title="Abrir a Área do cliente (só os imóveis, sem nada de administração)">👁️ Área do cliente</a>
   </div>
 </header>
 
@@ -64,65 +39,55 @@
 
       <form id="form" class="cartao" autocomplete="off">
         <h2>Cadastrar imóvel</h2>
-        <p class="form-dica">Cole a descrição pronta do imóvel. O preço, a cidade/bairro, o tipo e o título
-          saem dela automaticamente — não precisa preencher campo por campo.</p>
 
         <label class="campo">
-          <span>Descrição do imóvel</span>
-          <textarea id="f-descricao" rows="12" placeholder="Cole aqui a descrição completa, do jeito que você escreve no WhatsApp. Ex.:&#10;&#10;Casa 3 quartos no Centro&#10;Rua das Flores, Centro — São Luís/MA&#10;R$ 450.000,00&#10;Descrição completa com quintal, garagem..."></textarea>
+          <span>Título do anúncio</span>
+          <input id="f-titulo" type="text" placeholder="Ex.: Casa 3 quartos no Centro" required />
         </label>
-        <p id="dadosLidos" class="dados-lidos">Ainda não achei preço nem cidade na descrição.</p>
+
+        <div class="linha">
+          <label class="campo">
+            <span>Tipo</span>
+            <select id="f-tipo">
+              <option>Casa</option>
+              <option>Apartamento</option>
+              <option>Terreno</option>
+              <option>Sítio / Chácara</option>
+              <option>Galpão / Armazém</option>
+              <option>Sala comercial</option>
+            </select>
+          </label>
+          <label class="campo">
+            <span>Finalidade</span>
+            <select id="f-finalidade">
+              <option>Venda</option>
+              <option>Aluguel</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="linha">
+          <label class="campo">
+            <span>Preço (R$)</span>
+            <input id="f-preco" type="text" inputmode="decimal" placeholder="450.000,00" />
+          </label>
+          <label class="campo">
+            <span>Cidade / Bairro</span>
+            <input id="f-local" type="text" placeholder="Cidade — Bairro" />
+          </label>
+        </div>
 
         <label class="campo">
-          <span>Fotos da casa (pode escolher várias — até 300)</span>
-          <input id="f-imagem" type="file" accept="image/*,video/*" multiple />
+          <span>Fotos da casa (pode escolher várias)</span>
+          <input id="f-imagem" type="file" accept="image/*" multiple />
         </label>
         <div id="miniaturas" class="miniaturas"></div>
         <p id="fotosInfo" class="fotos-info">Nenhuma foto escolhida</p>
 
-        <p class="campo-rotulo">Vídeos (até 5, 50 MB cada)</p>
-        <div id="videosMiniaturas" class="videos-miniaturas"></div>
-        <p id="videosInfo" class="fotos-info">Nenhum vídeo escolhido</p>
-
-        <details class="ajustes">
-          <summary>Ajustar os dados lidos (opcional)</summary>
-          <label class="campo">
-            <span>Título do anúncio</span>
-            <input id="f-titulo" type="text" placeholder="deixe vazio para usar a primeira linha da descrição" />
-          </label>
-          <div class="linha">
-            <label class="campo">
-              <span>Tipo</span>
-              <select id="f-tipo">
-                <option value="">Automático</option>
-                <option>Casa</option>
-                <option>Apartamento</option>
-                <option>Terreno</option>
-                <option>Sítio / Chácara</option>
-                <option>Galpão / Armazém</option>
-                <option>Sala comercial</option>
-              </select>
-            </label>
-            <label class="campo">
-              <span>Finalidade</span>
-              <select id="f-finalidade">
-                <option value="">Automático</option>
-                <option>Venda</option>
-                <option>Aluguel</option>
-              </select>
-            </label>
-          </div>
-          <div class="linha">
-            <label class="campo">
-              <span>Preço (R$)</span>
-              <input id="f-preco" type="text" inputmode="decimal" placeholder="lido da descrição" />
-            </label>
-            <label class="campo">
-              <span>Cidade / Bairro</span>
-              <input id="f-local" type="text" placeholder="lido da descrição" />
-            </label>
-          </div>
-        </details>
+        <label class="campo">
+          <span>Descrição</span>
+          <textarea id="f-descricao" rows="6" placeholder="Escreva aqui a descrição completa do imóvel..."></textarea>
+        </label>
 
         <div class="acoes-form">
           <button type="submit" class="btn btn-primario" id="btnSalvar">Salvar imóvel</button>
@@ -157,22 +122,8 @@
   <!-- ============ ÁREA DO CORRETOR (só com usuário e senha) ============ -->
   <section id="admin" class="admin" hidden>
 
-    <!-- cliente tentando entrar na Área do corretor -->
-    <div id="bloqueioCliente" class="cartao cartao-login bloqueio-cliente" hidden>
-      <div class="bloqueio-icone" aria-hidden="true">🔒</div>
-      <h2>Esta área é da equipe</h2>
-      <p class="admin-sub">
-        Você está como <b>Cliente</b>, então aqui não tem nada para você mexer.
-        Para ver as casas, fotos e vídeos, vá para a <b>Área do cliente</b>.
-      </p>
-      <div class="acoes-form">
-        <button type="button" class="btn btn-primario" id="btnIrAreaCliente">👁️ Redirecionar para a Área do cliente</button>
-      </div>
-      <p class="admin-nota">É da equipe? Entre pela <b>Área do desenvolvedor</b>, com a senha do dono.</p>
-    </div>
-
     <!-- login -->
-    <div id="adminLogin" class="cartao cartao-login" hidden>
+    <div id="adminLogin" class="cartao cartao-login">
       <h2 id="loginTitulo">Área do corretor</h2>
       <p class="admin-sub" id="loginSub">Entre com seu usuário e senha para liberar aparelhos e permissões.</p>
       <label class="campo">
@@ -191,8 +142,8 @@
       <p class="admin-nota">Primeiro acesso? Entre com <b>admin</b> e a senha <b>publio2026</b> e troque a senha logo em seguida.</p>
     </div>
 
-    <!-- dispositivos — exclusivo de quem entrou com usuário e senha -->
-    <div id="adminPainel" class="painel-dev" hidden>
+    <!-- dispositivos -->
+    <div id="adminPainel" hidden>
       <div class="barra-admin">
         <span>Você entrou como <b id="quemEntrou">—</b></span>
         <span class="selo-cargo" id="seloMeuCargo">—</span>
@@ -372,7 +323,6 @@
 </main>
 
 <script src="fflate.min.js"></script>
-<script src="app.js?v=24"></script>
-<script src="abertura.js?v=12"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

@@ -468,57 +468,117 @@ body.casa-aberta { overflow: hidden; }
   display: block;
 }
 
-/* ---------------- VENDA / ALUGUEL — a primeira escolha ---------------- */
-.cliente-finalidade {
-  max-width: 1180px;
-  margin: 22px auto 0;
-  padding: 0 18px;
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
-  gap: 12px;
-}
-.fin {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 16px 20px;
-  border-radius: 16px;
-  border: 1px solid var(--borda);
-  background: #131109;
-  color: var(--texto);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: border-color .15s, background .15s, transform .08s, box-shadow .15s;
-}
-.fin:hover { border-color: var(--ouro-fosco); background: #1a1710; }
-.fin:active { transform: translateY(1px); }
-.fin:focus-visible { outline: 2px solid var(--ouro-claro); outline-offset: 2px; }
-.fin-nome {
-  font-size: 1.15rem;
-  font-weight: 800;
-  letter-spacing: .2px;
-}
-.fin-sub {
-  font-size: .78rem;
-  font-weight: 500;
-  color: var(--texto-suave);
-}
-.fin.ativo {
-  background: linear-gradient(145deg, var(--ouro-claro), var(--ouro-fosco));
-  border-color: transparent;
-  box-shadow: 0 10px 26px rgba(212, 175, 55, .22);
-}
-.fin.ativo .fin-nome { color: #17140a; }
-.fin.ativo .fin-sub { color: rgba(23, 20, 10, .72); }
-.fin-todos { align-items: center; justify-content: center; padding: 16px 18px; }
-.fin-todos .fin-nome { font-size: .95rem; }
-.fin-todos .fin-sub { font-size: .72rem; }
+/* ==========================================================
+   CELULAR — ficha da casa em tela cheia que dá para rolar
+   (foto com altura limitada + informações logo abaixo)
+   ========================================================== */
+@media (max-width: 760px) {
+  .casa-modal { padding: 0; align-items: stretch; }
 
-@media (max-width: 640px) {
-  .cliente-finalidade { grid-template-columns: 1fr 1fr; }
-  .fin-todos { grid-column: 1 / -1; }
-  .fin { padding: 13px 16px; }
-  .fin-nome { font-size: 1.02rem; }
+  .casa-modal-caixa {
+    width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;           /* a rolagem fica só na parte de baixo */
+    animation: none;
+  }
+
+  /* foto: altura fixa e confortável, nunca maior que 42% da tela */
+  .casa-modal-palco {
+    min-height: 0;
+    height: 42dvh;
+    max-height: 42dvh;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--borda);
+  }
+  .casa-modal-palco img {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: cover;
+  }
+
+  /* setas menores e encostadas nas laterais */
+  .casa-modal-setas { width: 38px; height: 38px; }
+  .seta-esq.casa-modal-setas { left: 8px; }
+  .seta-dir.casa-modal-setas { right: 8px; }
+
+  /* botão fechar no canto, sempre alcançável */
+  .casa-modal-fechar {
+    position: fixed;
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    right: 8px;
+    z-index: 5;
+    width: 38px; height: 38px;
+  }
+
+  /* informações: ocupam o resto da tela e rolam */
+  .casa-modal-info {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 14px calc(28px + env(safe-area-inset-bottom, 0px));
+    max-height: none;
+  }
+  .casa-modal-titulo, .casa-modal-info h2 { font-size: 1.12rem; line-height: 1.25; }
+  .casa-modal-descricao { font-size: .92rem; line-height: 1.55; }
+  .casa-modal-miniaturas { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; }
+  .casa-modal-miniaturas img { flex: 0 0 auto; }
+  .casa-modal-videos { display: grid; gap: 10px; }
+  .casa-modal-videos iframe, .casa-modal-videos video { width: 100%; height: auto; aspect-ratio: 16 / 9; }
+}
+
+/* ---------- Trilho de fotos que acompanha o dedo ---------- */
+.casa-trilho {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+  touch-action: pan-y;          /* deixa o dedo horizontal ir para o trilho */
+}
+.casa-trilho.animando { transition: transform .28s cubic-bezier(.22,.61,.36,1); }
+.casa-trilho .casa-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+.casa-trilho .casa-slide[hidden] { display: none; }
+
+/* o palco antigo tinha a imagem direto: mantém o comportamento no desktop */
+.casa-modal-palco { overflow: hidden; }
+
+/* ==========================================================
+   CELULAR — foto inteira, sem corte (antes o "cover" dava
+   a impressão de zoom e cortava a casa nas laterais)
+   ========================================================== */
+@media (max-width: 760px) {
+  .casa-modal-palco {
+    height: auto;
+    max-height: 46dvh;
+    background: #080705;
+  }
+  .casa-modal-palco img,
+  .casa-trilho .casa-slide {
+    width: 100%;
+    height: auto;
+    max-height: 46dvh;
+    object-fit: contain;      /* mostra a foto inteira */
+  }
+  .casa-trilho {
+    height: auto;
+    align-items: center;
+  }
+  .casa-trilho .casa-slide {
+    flex: 0 0 100%;
+  }
+  /* contador e setas continuam por cima */
+  .casa-modal-palco { position: relative; }
 }

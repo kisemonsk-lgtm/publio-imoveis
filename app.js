@@ -107,26 +107,16 @@ function sbHeaders(extra = {}) {
 function sbUrl(caminho) {
   return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho;
 }
-const CAMPOS_BASE = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
-/* A coluna "videos" pode ainda não existir no banco (o SUPABASE.sql cria).
-   Se ela faltar, o site continua funcionando sem vídeos em vez de dizer
-   "sem conexão com a nuvem". */
-let temColunaVideos = null;               // null = ainda não sei
-function camposImovel() {
-  return temColunaVideos === false ? CAMPOS_BASE : (CAMPOS_BASE + ",videos");
-}
+const CAMPOS_IMOVEL = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
 
 async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   let ultimo;
   for (let i = 0; i < tentativas; i++) {
-    let r = null;
     try {
-      r = await fetch(url, opcoes);
+      const r = await fetch(url, opcoes);
       if (r.ok) return r;
-      // 4xx é resposta do servidor: devolve a resposta para quem chamou decidir
-      // (ex.: coluna que ainda não existe -> tenta de novo sem ela)
-      if (r.status >= 400 && r.status < 500) return r;
       ultimo = new Error("servidor respondeu " + r.status);
+      if (r.status >= 400 && r.status < 500) break;
     } catch (e) {
       ultimo = new Error("falha de rede (" + (e.message || "conexão recusada") + ")");
     }
@@ -135,25 +125,10 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   throw ultimo || new Error("falha desconhecida");
 }
 
-/* Erro do Supabase (400 etc.) vira exceção — usado em gravar/apagar */
-function exigirOk(r, oQue) {
-  if (r && r.ok) return r;
-  const codigo = r ? r.status : "?";
-  throw new Error((oQue ? oQue + ": " : "") + "servidor respondeu " + codigo);
-}
-
 /* Lê todos os imóveis da nuvem */
 async function nuvemLer() {
   if (!NUVEM.ativa) return null;
-  let r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${camposImovel()}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
-  if (r.status === 400 && temColunaVideos !== false) {
-    // o banco ainda não tem a coluna dos vídeos: lê sem ela e avisa uma vez
-    temColunaVideos = false;
-    console.warn("A coluna 'videos' ainda não existe no Supabase — rode o SUPABASE.sql. Seguindo sem vídeos.");
-    r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_BASE}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
-  } else if (r.ok) {
-    temColunaVideos = true;
-  }
+  const r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_IMOVEL}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
   const linhas = await r.json();
   return (linhas || []).map((l) => ({
     id: String(l.id),
@@ -165,7 +140,6 @@ async function nuvemLer() {
     descricao: l.descricao || "",
     imagem: l.imagem || "",
     imagens: Array.isArray(l.imagens) ? l.imagens : (l.imagem ? [l.imagem] : []),
-    videos: Array.isArray(l.videos) ? l.videos.filter(Boolean) : [],
     criadoEm: Number(l.criadoEm) || Date.now(),
     atualizadoEm: Number(l.atualizadoEm) || Date.now()
   }));
@@ -174,18 +148,10 @@ async function nuvemLer() {
 /* Lê um imóvel só pelo id (para o cliente que abre a ficha sem ter a lista) */
 async function nuvemLerUm(id) {
   if (!NUVEM.ativa) return null;
-  let r = await nuvemFetch(
-    sbUrl(`${SUPABASE.tabela}?select=${camposImovel()}&id=eq.${encodeURIComponent(id)}&limit=1`),
+  const r = await nuvemFetch(
+    sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_IMOVEL}&id=eq.${encodeURIComponent(id)}&limit=1`),
     { headers: sbHeaders(), cache: "no-store" }
   );
-  if (r.status === 400 && temColunaVideos !== false) {
-    temColunaVideos = false;
-    r = await nuvemFetch(
-      sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_BASE}&id=eq.${encodeURIComponent(id)}&limit=1`),
-      { headers: sbHeaders(), cache: "no-store" }
-    );
-  }
-  if (!r.ok) return null;
   const linhas = await r.json();
   const l = (linhas || [])[0];
   if (!l) return null;
@@ -199,7 +165,6 @@ async function nuvemLerUm(id) {
     descricao: l.descricao || "",
     imagem: l.imagem || "",
     imagens: Array.isArray(l.imagens) ? l.imagens : (l.imagem ? [l.imagem] : []),
-    videos: Array.isArray(l.videos) ? l.videos.filter(Boolean) : [],
     criadoEm: Number(l.criadoEm) || Date.now(),
     atualizadoEm: Number(l.atualizadoEm) || Date.now()
   };
@@ -218,27 +183,14 @@ async function nuvemSalvarUm(im) {
     descricao: im.descricao || "",
     imagem: im.imagem || "",
     imagens: imagensDe(im),
-    videos: Array.isArray(im.videos) ? im.videos.filter(Boolean) : [],
     criadoEm: im.criadoEm || Date.now(),
     atualizadoEm: im.atualizadoEm || Date.now()
   };
-  const opcoes = {
+  await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), {
     method: "POST",
     headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify(linha)
-  };
-  try {
-    exigirOk(await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), opcoes), "salvar imóvel");
-    temColunaVideos = true;
-  } catch (e) {
-    if (!/videos|42703/i.test(e.message)) throw e;
-    // banco sem a coluna dos vídeos: grava o resto do imóvel e segue
-    temColunaVideos = false;
-    const semVideos = Object.assign({}, linha);
-    delete semVideos.videos;
-    console.warn("A coluna 'videos' ainda não existe no Supabase — o imóvel foi salvo sem vídeos. Rode o SUPABASE.sql.");
-    exigirOk(await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), Object.assign({}, opcoes, { body: JSON.stringify(semVideos) })), "salvar imóvel");
-  }
+  });
   return true;
 }
 
@@ -301,28 +253,6 @@ async function enviarFotoParaServidor(dataUrl) {
   return sbStorageUrl(caminho);
 }
 
-/* Envia um vídeo (ou qualquer arquivo) para o Storage do Supabase */
-async function enviarArquivoParaServidor(arquivo, pasta, extensao) {
-  const caminho = pasta + "/" + novoId() + "." + extensao;
-  const r = await fetch(SUPABASE.url.replace(/\/$/, "") + "/storage/v1/object/" + SUPABASE.bucket + "/" + caminho, {
-    method: "POST",
-    headers: {
-      "apikey": SUPABASE.chave,
-      "Authorization": "Bearer " + SUPABASE.chave,
-      "Content-Type": arquivo.type || "application/octet-stream",
-      "x-upsert": "true",
-      "cache-control": "public, max-age=31536000"
-    },
-    body: arquivo
-  });
-  if (!r.ok) {
-    let detalhe = "";
-    try { detalhe = (await r.json()).message || ""; } catch (_) { detalhe = ""; }
-    throw new Error("o envio falhou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
-  }
-  return sbStorageUrl(caminho);
-}
-
 /* Troca as fotos guardadas no aparelho por endereços na internet */
 async function enviarFotosParaServidor(im) {
   if (!NUVEM.fotosFora) return im;
@@ -353,7 +283,6 @@ async function nuvemLerApagados() {
   if (!NUVEM.ativa) return [];
   try {
     const r = await nuvemFetch(sbUrl("imoveis_apagados?select=id&limit=1000"), { headers: sbHeaders(), cache: "no-store" });
-    if (!r || !r.ok) return [];
     const linhas = await r.json();
     return (linhas || []).map((l) => String(l.id));
   } catch (e) {
@@ -365,11 +294,11 @@ async function nuvemLerApagados() {
 async function nuvemMarcarApagado(id) {
   if (!NUVEM.ativa) return false;
   try {
-    exigirOk(await nuvemFetch(sbUrl("imoveis_apagados?on_conflict=id"), {
+    await nuvemFetch(sbUrl("imoveis_apagados?on_conflict=id"), {
       method: "POST",
       headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
       body: JSON.stringify({ id: String(id), apagadoEm: Date.now() })
-    }), "marcar como apagado");
+    });
     return true;
   } catch (e) {
     console.warn("Não consegui registrar a exclusão:", e.message);
@@ -590,10 +519,8 @@ function tamanhoImovel(im) {
   return bytesFotos + texto;
 }
 const LIMITE_IMOVEL = 1048000;   // texto do imóvel no banco (as fotos ficam no Storage)
-const MAX_FOTOS = 300;           // fotos por imóvel (as fotos ficam no Storage)
+const MAX_FOTOS = 30;            // fotos por imóvel (as fotos ficam no Storage)
 const LIMITE_FOTO = 5000000;     // 5 MB por foto (limite do bucket)
-const MAX_VIDEOS = 5;            // vídeos por imóvel
-const LIMITE_VIDEO = 50 * 1024 * 1024;   // 50 MB por vídeo
 
 async function copiarTexto(texto) {
   try {
@@ -677,19 +604,16 @@ function linkDaFicha(im) {
 function limparForm() {
   editandoId = null;
   imagemAtual = [];
-  videosAtual = [];
   $("#form").reset();
   $("#btnSalvar").textContent = "Salvar imóvel";
   $("#f-imagem").value = "";
   renderMiniaturas();
-  renderVideos();
   aviso($("#avisoForm"), "");
 }
 
 function preencherForm(im) {
   editandoId = im.id;
   imagemAtual = imagensDe(im).slice();
-  videosAtual = (Array.isArray(im.videos) ? im.videos : []).map((u, i) => ({ arquivo: null, url: u, nome: "vídeo " + (i + 1), tipo: "" }));
   $("#f-titulo").value = im.titulo || "";
   $("#f-tipo").value = im.tipo || "Casa";
   $("#f-finalidade").value = im.finalidade || "Venda";
@@ -698,260 +622,9 @@ function preencherForm(im) {
   $("#f-descricao").value = im.descricao || "";
   $("#f-imagem").value = "";
   renderMiniaturas();
-  renderVideos();
   $("#btnSalvar").textContent = "Atualizar imóvel";
   window.scrollTo({ top: 0, behavior: "smooth" });
   $("#f-titulo").focus();
-}
-
-/* ---------------- Vídeos do imóvel ---------------- */
-let videosAtual = [];      // [{ arquivo, url, nome, tipo }]
-
-function renderVideos() {
-  const box = document.getElementById("videosMiniaturas");
-  if (box) {
-    box.innerHTML = videosAtual.map((v, i) => `
-      <div class="video-mini">
-        <span class="video-icone">▶</span>
-        <span class="video-nome">${escapar(v.nome || "vídeo")}</span>
-        <button type="button" class="mini-x" data-video="${i}" title="Remover vídeo">×</button>
-      </div>`).join("");
-  }
-  const cont = document.getElementById("videosInfo");
-  if (cont) {
-    cont.textContent = videosAtual.length
-      ? `${videosAtual.length} de ${MAX_VIDEOS} vídeos`
-      : "Nenhum vídeo escolhido";
-  }
-}
-
-/* ---------------- Ler a descrição e tirar dali os dados do anúncio ----------------
-   O corretor cola a descrição pronta (do jeito que ele já escreve no WhatsApp)
-   e o sistema tira sozinho: preço, cidade/bairro, tipo, finalidade e um título. */
-function numeroBR(t) {
-  const limpo = String(t).replace(/\./g, "").replace(",", ".");
-  const n = Number(limpo);
-  return isFinite(n) ? n : 0;
-}
-
-function lerDescricao(texto) {
-  const t = String(texto || "").replace(/\r/g, "");
-  const linhas = t.split("\n").map((l) => l.trim()).filter(Boolean);
-  const res = { preco: "", local: "", tipo: "", finalidade: "", titulo: "" };
-
-  /* ---- preço ---- */
-  const mPreco = t.match(/R\$\s*([\d.]+(?:,\d{1,2})?)/i);
-  if (mPreco) {
-    const n = numeroBR(mPreco[1]);
-    if (n > 0) res.preco = n.toFixed(2).replace(".", ",");
-  } else {
-    const mNum = t.match(/(?:^|\s)(\d{1,3}(?:\.\d{3})+(?:,\d{2})?)(?:\s|$)/);
-    if (mNum) {
-      const n = numeroBR(mNum[1]);
-      if (n >= 1000) res.preco = n.toFixed(2).replace(".", ",");
-    }
-  }
-
-  /* ---- finalidade ---- */
-  if (/para\s+(aluguel|alugar|locar|loca[çc][ãa]o)|\baluga-se\b|\balugo\b|\bloca[çc][ãa]o\b|\bmensalidade\b/i.test(t)) res.finalidade = "Aluguel";
-  else if (/para\s+venda|\bvende-se\b|\ba venda\b|\bcomprar\b|\bvendo\b/i.test(t)) res.finalidade = "Venda";
-  else if (/\baluguel\b|\baluga\b|\blocado\b/i.test(t)) res.finalidade = "Aluguel";
-  else if (/\bvenda\b|\bvender\b/i.test(t)) res.finalidade = "Venda";
-
-  /* ---- tipo ---- */
-  const tipos = [
-    [/\bapartamento\b|\bapto\b|\bflat\b|\bkitnet\b|\bstudio\b/i, "Apartamento"],
-    [/\bs[íi]tio\b|\bch[áa]cara\b|\bfazenda\b|\brural\b/i, "Sítio / Chácara"],
-    [/\bgalp[ãa]o\b|\barmaz[ée]m\b|\bbarrac[ãa]o\b/i, "Galpão / Armazém"],
-    [/\bsala comercial\b|\bloja\b|\bponto comercial\b|\bescrit[óo]rio\b/i, "Sala comercial"],
-    [/\bterreno\b|\blote\b|\b[áa]rea\b|\bch[áa]cara de terreno\b/i, "Terreno"],
-    [/\bcasa\b|\bsobrado\b|\bch[áa]let\b/i, "Casa"]
-  ];
-  for (const [re, nome] of tipos) { if (re.test(t)) { res.tipo = nome; break; } }
-
-  /* ---- bairro ----
-     O bairro costuma ser a PRIMEIRA linha do anúncio, curta e sem frase de venda.
-     Se não for, procura uma linha curta que não fale do imóvel. */
-  const FRASE_VENDA = /\b(completa|confort[áa]vel|pronta|morar|oportunidade|excelente|linda|[óo]tima|maravilh|reformad|amplo|ampla|venha|confira|aceita|financia|documenta[çc][ãa]o|localiza|bem localizad|tranquil|segur|sonho|realidade|novo|nova)\b/i;
-  const FALA_IMOVEL = /\b(casa|casas|apartamento|apto|sobrado|terreno|lote|s[íi]tio|ch[áa]cara|galp[ãa]o|sala|loja|kitnet|flat|studio|im[óo]vel|ch[áa]let|edif[íi]cio|quintal|garagem|piscina|quartos?|su[íi]tes?|vagas?|varanda|sacada|cozinha|banheiros?|m2|m²|metros?)\b/i;
-  const RUA = /\b(rua|avenida|av\.|travessa|alameda|rodovia|estrada|pra[çc]a|km)\b/i;
-
-  function pareceBairro(l, primeiraLinha) {
-    if (!l) return false;
-    const limpo = l.replace(/^(bairro|localiza[çc][ãa]o|endere[çc]o)\s*[:\-–]?\s*/i, "").trim();
-    if (limpo.length < 3 || limpo.length > 46) return false;
-    if (/R\$/.test(l) || /\d{4,}/.test(l)) return false;         // preço
-    if (/\d+\s*(quartos?|su[íi]tes?|vagas?|m2|m²|metros?)/i.test(l)) return false;
-    if (FRASE_VENDA.test(l)) return false;                       // frase de anúncio
-    if (FALA_IMOVEL.test(l) && !primeiraLinha) return false;      // fala do imóvel (fora da 1ª linha)
-    if (RUA.test(l) && /\d/.test(l)) return false;                // rua com número
-    if (/[!?]/.test(l)) return false;
-    const palavras = limpo.split(/\s+/).filter(Boolean).length;
-    if (palavras > 5) return false;
-    return true;
-  }
-
-  let bairroLinha = "";
-  // 1) a primeira linha do anúncio, se ela tem cara de bairro
-  const primeiraLinha = linhas[0] || "";
-  if (pareceBairro(primeiraLinha, true)) bairroLinha = primeiraLinha;
-  // 2) senão, a primeira linha curta que não fale do imóvel
-  if (!bairroLinha) {
-    for (const l of linhas) {
-      if (l === primeiraLinha) continue;
-      if (pareceBairro(l, false)) { bairroLinha = l; break; }
-    }
-  }
-  res.bairro = bairroLinha
-    .replace(/^(bairro|localiza[çc][ãa]o|endere[çc]o)\s*[:\-–]?\s*/i, "")
-    .replace(/\s*[.,;!?]+$/, "")
-    .trim();
-
-  /* ---- cidade / bairro ----
-     1) linha de endereço: "Rua X, Bairro — Cidade/UF", "Bairro, Cidade"
-     2) senão, o lugar citado logo depois de "no/na/em/do/da" numa linha curta
-     3) senão, a primeira linha de endereço que aparecer no meio do texto */
-  const PISTAS = /\b(rua|avenida|av\.|bairro|centro|jardim|jardins|vila|parque|pra[çc]a|alameda|travessa|rodovia|estrada|km|zona)\b/i;
-  const UFS = "AC AL AP AM BA CE DF ES GO MA MT MS MG PA PB PR PE PI RJ RN RS RO RR SC SP SE TO";
-  const uf = new RegExp("\\b(" + UFS.split(" ").join("|") + ")\\b");
-
-  function limpaLocal(l) {
-    return l
-      .replace(/^(localiza[çc][ãa]o|local|cidade|endere[çc]o|bairro)\s*[:\-–]\s*/i, "")
-      .replace(/\s*[.,;]+$/, "")
-      .trim();
-  }
-
-  /* sinais de que a linha NÃO é endereço: quartos, metros, valores, itens da casa */
-  const NAO_ENDERECO = /\b\d+\s*(quartos?|su[íi]tes?|vagas?|banheiros?|m2|m²|metros?|hectares?|carros?)\b|\b\d+\s*x\s*\d+\b|\b(piscina|quintal|garagem|mobiliado|mobiliada|documenta[çc][ãa]o|aceita|financiamento|fgts|entrada|parcel)/i;
-
-  function ehLinhaDeEndereco(l) {
-    if (/R\$/i.test(l) || l.length > 110) return false;
-    if (NAO_ENDERECO.test(l)) return false;
-    return /[—–]|\s-\s|\/|,/.test(l);
-  }
-
-  /* Pontua cada pedaço de uma linha de endereço e escolhe os que são lugar */
-  function pedacosDeLugar(l, manterRua) {
-    const partes = l.split(/[—–]|\s-\s|\/|,/).map((x) => x.trim()).filter(Boolean);
-    const lugares = [];
-    for (const p of partes) {
-      if (p.length < 3 || /^\d+$/.test(p)) continue;
-      if (NAO_ENDERECO.test(p)) continue;
-      if (!manterRua && /\b(rua|avenida|av\.|travessa|alameda|rodovia|estrada)\b/i.test(p) && /\d/.test(p)) continue; // rua com número: é endereço, não cidade
-      lugares.push(p);
-    }
-    return lugares;
-  }
-
-  let local = "";
-  // 1) a linha mais "de endereço": tem separador e cidade/bairro depois dele
-  let melhor = 0;
-  for (const l of linhas) {
-    if (!ehLinhaDeEndereco(l)) continue;
-    const lugares = pedacosDeLugar(l);
-    if (!lugares.length) continue;
-    let nota = 0;
-    if (uf.test(l)) nota += 5;
-    if (PISTAS.test(l)) nota += 3;
-    if (lugares.length >= 2) nota += 2;
-    // com UF na linha, o nome da rua é bem-vindo (é a localização completa)
-    const finais = uf.test(l) ? pedacosDeLugar(l, true) : lugares;
-    if (nota > melhor) { melhor = nota; local = finais.join(", "); }
-  }
-  // 2a) "no bairro X" / "bairro X" solto no texto
-  if (!local) {
-    const mBairro = t.match(/\bbairro\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÀ-ÿ'’ ]{2,40})/);
-    if (mBairro) local = mBairro[1].replace(/\s+(com|de|do|da|que|e)\s.*$/i, "").trim();
-  }
-  // 2b) lugar depois de "no/na/em/do/da" numa linha curta (o título costuma ser assim)
-  if (!local) {
-    const lugares = "centro|jardim|jardins|vila|parque|bairro|praia|pra[çc]a|alameda|zona rural|renascen[çc]a|calhau|olho d.água|cohatrac|turu|ara[çc]agi|forquilha|f[ée] em deus|cidade oper[áa]ria|s[ãa]o lu[íi]s|imperatriz|ros[áa]rio|pa[çc]o do lumiar|rap[óo]sa";
-    const re = new RegExp("\\b(?:no|na|em|do|da|nos|nas)\\s+(?:bairro\\s+(?:de\\s+|do\\s+|da\\s+)?)?((?:[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\\wÀ-ÿ'’]*|" + lugares + ")(?:\\s+(?:de|do|da|dos|das)?\\s*(?:[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\\wÀ-ÿ'’]*|" + lugares + ")){0,3})", "i");
-    for (const l of linhas) {
-      if (/R\$/i.test(l) || l.length > 110) continue;
-      if (NAO_ENDERECO.test(l)) continue;
-      const m = l.match(re);
-      if (m) { local = m[1].trim(); break; }
-    }
-  }
-  // 3) qualquer linha que fale de endereço
-  if (!local) {
-    for (const l of linhas) {
-      if (!PISTAS.test(l) || l.length > 110 || /R\$/i.test(l) || NAO_ENDERECO.test(l)) continue;
-      const lugares = pedacosDeLugar(l);
-      local = lugares.length ? lugares.join(", ") : l;
-      break;
-    }
-  }
-  res.local = limpaLocal(local);
-
-  /* A cidade é sempre LEM-BA. O local final fica "BAIRRO — Luís Eduardo Magalhães - BA". */
-  const limpaCidade = (t) => String(t || "")
-    .replace(/\b(Lu[íi]s Eduardo Magalh[ãa]es|LEM)\b/gi, "")
-    .replace(/[-–\/,]?\s*\bBA\b\s*$/i, "")
-    .replace(/^\s*[-–\/,]+\s*|\s*[-–\/,]+\s*$/g, "")
-    .trim();
-
-  let bairroFinal = res.bairro || "";
-  if (!bairroFinal && res.local) {
-    // usa só o pedaço do endereço que não é rua nem frase
-    const pedacos = limpaCidade(res.local).split(/[—–]|\s-\s|\/|,/).map((x) => x.trim()).filter(Boolean);
-    const bom = pedacos.find((x) => !RUA.test(x) && !FRASE_VENDA.test(x) && !FALA_IMOVEL.test(x) && x.length >= 3);
-    bairroFinal = bom || "";
-  }
-  res.local = bairroFinal ? (bairroFinal + " — " + CIDADE_PADRAO) : CIDADE_PADRAO;
-
-  /* ---- título ---- */
-  const TITULO_OK = (l) => l.length >= 8 && l.length <= 90 && !/R\$\s*\d/i.test(l) &&
-    !/^[-–•*]/.test(l) && !/[—–]/.test(l) &&
-    !/\b(Rua|Avenida|Av\.|Travessa|Alameda|Rodovia|Estrada)\b/i.test(l) &&
-    !/\/\s*[A-Z]{2}\s*$/.test(l) &&
-    !/^\d+\s*x\s*\d+/i.test(l) &&
-    !/\b(\d+\s*(quartos?|su[íi]tes?|vagas?|banheiros?|m2|m²|metros?|hectares?)\s*(,|e\s+\d|$))/i.test(l) &&
-    !/^(documenta[çc][ãa]o|aceita|financia|obs|aten[çc][ãa]o)/i.test(l);
-  const primeira = linhas.find((l) => TITULO_OK(l) && l !== bairroLinha && !(pareceBairro(l, true) && !FALA_IMOVEL.test(l) && !FRASE_VENDA.test(l)));
-  // se a primeira linha "de anúncio" for só um item (ex.: "Quintal e garagem"), prefere a
-  // primeira linha que fale de imóvel (casa, apartamento, terreno...) e caiba no título
-  const falaDeImovel = /\b(casa|casas|apartamento|apto|sobrado|terreno|lote|s[íi]tio|ch[áa]cara|galp[ãa]o|sala|loja|kitnet|flat|studio|im[óo]vel|ch[áa]let|edif[íi]cio)\b/i;
-  const comImovel = linhas.find((l) => TITULO_OK(l) && l !== bairroLinha && falaDeImovel.test(l));
-  const escolhida = comImovel || primeira;
-  if (escolhida) {
-    res.titulo = escolhida.replace(/[.!]+$/, "").trim();
-  } else {
-    const partes = [res.tipo, res.finalidade ? "para " + res.finalidade.toLowerCase() : ""].filter(Boolean);
-    res.titulo = partes.length ? partes.join(" ") : "Imóvel";
-  }
-  if (res.titulo.length > 80) res.titulo = res.titulo.slice(0, 80).replace(/\s+\S*$/, "") + "…";
-
-  return res;
-}
-
-/* Preenche os campos escondidos a partir da descrição */
-function aplicarDescricao(preencherCampos) {
-  const texto = $("#f-descricao").value;
-  const d = lerDescricao(texto);
-  const info = document.getElementById("dadosLidos");
-  // preenche os campos de ajuste (só os que a pessoa não escreveu à mão)
-  if (preencherCampos) {
-    const por = (id, valor) => {
-      const el = document.getElementById(id);
-      if (el && !el.dataset.tocado && valor) el.value = valor;
-    };
-    por("f-preco", d.preco);
-    por("f-local", d.local);
-  }
-  if (!d.preco && !d.local && !d.tipo) {
-    if (info) info.textContent = "Ainda não achei preço nem cidade na descrição.";
-    return d;
-  }
-  const pedacos = [];
-  if (d.preco) pedacos.push("preço " + fmtPreco(d.preco));
-  if (d.local) pedacos.push("local " + d.local);
-  if (d.tipo) pedacos.push(d.tipo);
-  if (d.finalidade) pedacos.push(d.finalidade);
-  if (info) info.textContent = "Li da descrição: " + pedacos.join(" • ");
-  return d;
 }
 
 /* Minuaturas das fotos no formulário */
@@ -994,57 +667,31 @@ async function salvarForm(ev) {
     aviso($("#avisoForm"), "Este aparelho não tem permissão para publicar imóveis. Peça ao corretor para liberar em Área do corretor.", true);
     return;
   }
-  const descricao = $("#f-descricao").value.trim();
-  if (!descricao) {
-    aviso($("#avisoForm"), "Cole a descrição do imóvel — o resto o sistema tira dali.", true);
+  const titulo = $("#f-titulo").value.trim();
+  if (!titulo) {
+    aviso($("#avisoForm"), "Informe o título do anúncio.", true);
     return;
   }
   if (!imagemAtual.length && !editandoId) {
     aviso($("#avisoForm"), "Escolha pelo menos uma foto da casa.", true);
     return;
   }
-
-  // preço, cidade/bairro, tipo, finalidade e título saem da descrição
-  const lido = lerDescricao(descricao);
-  const escolhido = (id) => {
-    const el = document.getElementById(id);
-    return el ? String(el.value || "").trim() : "";
-  };
-  const titulo = escolhido("f-titulo") || lido.titulo || "Imóvel";
-  const tipo = escolhido("f-tipo") || lido.tipo || "Casa";
-  const finalidade = escolhido("f-finalidade") || lido.finalidade || "Venda";
-  const preco = escolhido("f-preco") || lido.preco || "";
-  const local = escolhido("f-local") || lido.local || "";
-
-  const anterior = editandoId ? imoveis.find((x) => x.id === editandoId) : null;
-
-  // vídeos escolhidos vão para o Storage (os que já têm endereço ficam como estão)
-  const videosUrls = [];
-  for (let i = 0; i < videosAtual.length; i++) {
-    const v = videosAtual[i];
-    if (v.url) { videosUrls.push(v.url); continue; }
-    if (!v.arquivo) continue;
-    aviso($("#avisoForm"), `Enviando vídeo ${i + 1} de ${videosAtual.length}...`);
-    try {
-      const ext = (v.nome.split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp4";
-      videosUrls.push(await enviarArquivoParaServidor(v.arquivo, "videos", ext));
-      v.url = videosUrls[videosUrls.length - 1];
-    } catch (e) {
-      aviso($("#avisoForm"), "O vídeo não subiu: " + e.message, true);
-    }
+  if (!$("#f-descricao").value.trim()) {
+    aviso($("#avisoForm"), "Escreva a descrição do imóvel.", true);
+    return;
   }
 
+  const anterior = editandoId ? imoveis.find((x) => x.id === editandoId) : null;
   const im = {
     id: editandoId || novoId(),
     titulo,
-    tipo,
-    finalidade,
-    preco,
-    local,
-    descricao,
+    tipo: $("#f-tipo").value,
+    finalidade: $("#f-finalidade").value,
+    preco: $("#f-preco").value.trim(),
+    local: $("#f-local").value.trim(),
+    descricao: $("#f-descricao").value.trim(),
     imagem: imagemAtual[0] || "",
     imagens: imagemAtual.slice(),
-    videos: videosUrls,
     criadoEm: anterior ? (anterior.criadoEm || Date.now()) : Date.now(),
     atualizadoEm: Date.now()
   };
@@ -1472,10 +1119,16 @@ async function rotear() {
 
 /* O botão da Área do desenvolvedor precisa funcionar mesmo que o início ainda esteja carregando */
 function ligarBotaoDesenvolvedor() {
+  const lc = document.getElementById("btnAreaCliente");
+  if (lc && !podeMudarCargo()) lc.hidden = true;
   const b = document.getElementById("btnDesenvolvedor");
   if (!b || b._ligado) return;
   b._ligado = true;
   b.addEventListener("click", () => {
+    // a Área do desenvolvedor sempre pede usuário e senha de novo
+    sessao = false;
+    acesso = null;
+    try { gravarJSON(CHAVE_ACESSO + "-sessao", false); } catch (_) {}
     try { abrirAdmin("desenvolvedor"); }
     catch (e) { alert("Não consegui abrir a Área do desenvolvedor: " + e.message); }
   });
@@ -1503,28 +1156,11 @@ async function iniciar() {
   await carregarLista();
 
   try { await iniciarAcesso(); } catch (e) { console.warn("Acesso:", e.message); }
-  try { await aplicarModoCliente(); } catch (e) { console.warn("Modo cliente:", e.message); }
   ligarAdmin();
   try { await mostrarPedidoSePreciso(); } catch (e) { console.warn("Pedido:", e.message); }
 
   $("#form").addEventListener("submit", salvarForm);
   $("#btnLimpar").addEventListener("click", limparForm);
-
-  // enquanto digita/cola a descrição, mostra o que já foi lido dela
-  const campoDesc = $("#f-descricao");
-  if (campoDesc) {
-    let t = null;
-    const aoDigitar = () => {
-      clearTimeout(t);
-      t = setTimeout(aplicarDescricao, 400);
-    };
-    campoDesc.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => aplicarDescricao(true), 400); });
-    campoDesc.addEventListener("paste", () => setTimeout(() => aplicarDescricao(true), 60));
-    for (const id of ["f-preco", "f-local"]) {
-      const el = document.getElementById(id);
-      if (el) el.addEventListener("input", () => { el.dataset.tocado = "1"; });
-    }
-  }
   $("#btnNovo").addEventListener("click", () => {
     limparForm();
     if (location.hash) location.hash = "";
@@ -1533,61 +1169,27 @@ async function iniciar() {
   });
 
   $("#f-imagem").addEventListener("change", async (ev) => {
-    const todos = Array.from(ev.target.files || []);
-    const arquivos = todos.filter((f) => f.type.startsWith("image/"));
-    const videos = todos.filter((f) => f.type.startsWith("video/"));
+    const arquivos = Array.from(ev.target.files || []).filter((f) => f.type.startsWith("image/"));
+    if (!arquivos.length) return;
+    aviso($("#avisoForm"), `Preparando ${arquivos.length} foto(s)...`);
+    const novas = [];
+    for (const file of arquivos) {
+      try {
+        novas.push(await comprimirImagem(file));
+      } catch (e) {
+        aviso($("#avisoForm"), e.message, true);
+      }
+    }
+    imagemAtual = imagemAtual.concat(novas).slice(0, MAX_FOTOS);
     ev.target.value = "";
-    if (!arquivos.length && !videos.length) return;
-
-    if (arquivos.length) {
-      aviso($("#avisoForm"), `Preparando ${arquivos.length} foto(s)... pode levar um pouco com muitas fotos.`);
-      const novas = [];
-      let feitas = 0;
-      for (const file of arquivos) {
-        try {
-          novas.push(await comprimirImagem(file));
-        } catch (e) {
-          aviso($("#avisoForm"), e.message, true);
-        }
-        feitas++;
-        if (arquivos.length > 20 && feitas % 5 === 0) {
-          aviso($("#avisoForm"), `Preparando fotos... ${feitas} de ${arquivos.length}`);
-          await new Promise((ok) => setTimeout(ok, 0));   // deixa a tela respirar
-        }
-      }
-      imagemAtual = imagemAtual.concat(novas).slice(0, MAX_FOTOS);
-      renderMiniaturas();
-    }
-
-    if (videos.length) {
-      for (const v of videos) {
-        if (videosAtual.length >= MAX_VIDEOS) {
-          aviso($("#avisoForm"), `Máximo de ${MAX_VIDEOS} vídeos por imóvel.`, true);
-          break;
-        }
-        if (v.size > LIMITE_VIDEO) {
-          aviso($("#avisoForm"), `O vídeo "${v.name}" passa de 50 MB. Grave um mais curto ou reduza a qualidade.`, true);
-          continue;
-        }
-        videosAtual.push({ arquivo: v, url: "", nome: v.name, tipo: v.type });
-      }
-      renderVideos();
-    }
-
-    if (arquivos.length && imagemAtual.length >= MAX_FOTOS) {
+    renderMiniaturas();
+    if (!novas.length) {
+      aviso($("#avisoForm"), "Não consegui adicionar as fotos.", true);
+    } else if (imagemAtual.length >= MAX_FOTOS) {
       aviso($("#avisoForm"), `Limite de ${MAX_FOTOS} fotos por imóvel atingido.`);
-    } else if (arquivos.length) {
-      aviso($("#avisoForm"), `${arquivos.length} foto(s) pronta(s). Total: ${imagemAtual.length} de ${MAX_FOTOS}.`);
+    } else {
+      aviso($("#avisoForm"), `${novas.length} foto(s) adicionada(s). Total: ${imagemAtual.length} de ${MAX_FOTOS}.`);
     }
-  });
-
-  const boxVideos = document.getElementById("videosMiniaturas");
-  if (boxVideos) boxVideos.addEventListener("click", (ev) => {
-    const b = ev.target.closest("button[data-video]");
-    if (!b) return;
-    ev.preventDefault();
-    videosAtual.splice(Number(b.dataset.video), 1);
-    renderVideos();
   });
 
   const mini = document.getElementById("miniaturas");
@@ -1670,7 +1272,6 @@ async function iniciar() {
   renderLista();
   try { await rotear(); } catch (e) { console.error(e); mostrarTela("painel"); }
   try { await sincronizar(); } catch (e) { console.error(e); }
-  try { await aplicarModoCliente(); } catch (e) { console.warn("Modo cliente:", e.message); }
   try { await rotear(); } catch (e) { console.error(e); }
 
   // mantém a lista atualizada entre os aparelhos
@@ -1678,7 +1279,7 @@ async function iniciar() {
     setInterval(() => {
       if (document.hidden) return;
       if (location.hash.startsWith("#ficha/") || location.hash.startsWith("#ver/")) return;
-      sincronizar().then(() => aplicarModoCliente()).catch(() => {});
+      sincronizar();
     }, 30000);
 
     // ao voltar para a aba, busca novidades na hora
@@ -1688,64 +1289,6 @@ async function iniciar() {
   }
 }
 
-/* ==========================================================
-   MODO CLIENTE — aparelho que não é Funcionário nem ADM
-   ----------------------------------------------------------
-   Todo aparelho novo entra assim: vê as casas e mais nada.
-   Não aparece cadastro, excluir, Área do corretor nem
-   Área do desenvolvedor. Só o dono, no Modo Desenvolvedor,
-   muda a função do aparelho para Funcionário ou ADM.
-   ========================================================== */
-let modoCliente = null;    // null = ainda não sei; true = cliente; false = funcionário/ADM
-
-async function aplicarModoCliente() {
-  const perms = await minhasPermissoes();
-  const cliente = !sessao && !perms.publicar && !perms.apagar;
-  if (modoCliente === cliente) return cliente;
-  modoCliente = cliente;
-  document.body.classList.toggle("modo-cliente", cliente);
-  document.body.classList.toggle("modo-equipe", !cliente);
-
-  // cadastrar/atualizar: só a equipe
-  for (const id of ["btnNovo", "btnAtualizar"]) {
-    const b = document.getElementById(id);
-    if (b) b.hidden = cliente;
-  }
-  // Área do corretor e Área do desenvolvedor ficam SEMPRE visíveis:
-  // o cliente entra, mas só encontra o aviso e o botão de ir para a área do cliente.
-  const bDev = document.getElementById("btnDesenvolvedor");
-  if (bDev) {
-    bDev.hidden = false;
-    bDev.title = cliente
-      ? "Área do desenvolvedor — precisa da senha do dono"
-      : "Acesso do dono (usuário e senha)";
-  }
-  const bAdm = document.getElementById("btnAdmin");
-  if (bAdm) {
-    bAdm.hidden = false;
-    bAdm.title = cliente ? "Área do corretor — só para a equipe" : "Dispositivos e permissões";
-  }
-  // na área do cliente o link vira o "voltar" para o site das casas
-  const bCliente = document.getElementById("btnAreaCliente");
-  if (bCliente) {
-    bCliente.textContent = cliente ? "← Voltar ao site" : "👁️ Públio Cliente";
-    bCliente.href = cliente ? "publio-cliente.html" : "publio-cliente.html";
-  }
-  return cliente;
-}
-
-let modoPedido = "corretor";   // qual porta o usuário abriu: corretor ou desenvolvedor
-
-/* Cliente tentando entrar na Área do corretor: esconde tudo e mostra o aviso */
-function mostrarBloqueioCliente(mostrar) {
-  const bloqueio = document.getElementById("bloqueioCliente");
-  const login = document.getElementById("adminLogin");
-  const painelAdmin = document.getElementById("adminPainel");
-  if (bloqueio) bloqueio.hidden = !mostrar;
-  if (login) login.hidden = mostrar || sessao;
-  if (painelAdmin) painelAdmin.hidden = mostrar || !sessao;
-}
-
 /* A tela nunca fica em branco: se algo demorar, mostra o que já existe no aparelho */
 function mostrarTela(destino) {
   const painel = document.getElementById("painel");
@@ -1753,8 +1296,6 @@ function mostrarTela(destino) {
   const admin = document.getElementById("admin");
   if (!painel || !ficha) return;
   if (admin) admin.hidden = destino !== "admin";
-  // cliente nunca entra no conteúdo da Área do corretor: só o aviso de redirecionar
-  if (modoCliente && destino === "admin") mostrarBloqueioCliente(true);
   const pedido = document.getElementById("caixaPedido");
   if (pedido && destino !== "painel") pedido.hidden = true;
   if (destino === "ficha") { painel.hidden = true; ficha.hidden = false; }
@@ -1770,10 +1311,6 @@ function mostrarTela(destino) {
    enviar imóvel) e apagar imóveis de todos os dispositivos.
    O bloqueio vale no próprio aparelho (é um site sem servidor).
    ========================================================== */
-/* Todas as casas são de Luís Eduardo Magalhães — BA (LEM).
-   O bairro sai da descrição e a cidade entra sozinha. */
-const CIDADE_PADRAO = "Luís Eduardo Magalhães - BA";
-
 const CHAVE_ACESSO = "publio-acesso-v1";      // usuário, senha (hash) e sessão
 const CHAVE_DISPOSITIVOS = "publio-dispositivos-v1";
 const CHAVE_PEDIDOS = "publio-pedidos-acesso-v1";
@@ -1783,16 +1320,15 @@ const SENHA_PADRAO = "publio2026";
 // Credencial do dono — entra sempre como Desenvolvedor, em qualquer aparelho
 const DONO_USUARIO = "Pablo";
 const DONO_SENHA = "7733";
-/* Todo aparelho novo entra como CLIENTE: só vê as casas, sem liberar nada.
-   Para virar Funcionário ou ADM, o dono precisa mudar no Modo Desenvolvedor. */
-const PERMISSOES_PADRAO = { ver: true, publicar: false, apagar: false };
+const PERMISSOES_PADRAO = { ver: true, publicar: true, apagar: false };
 const CARGOS = {
   adm:       { nome: "ADM",        desc: "manda em tudo",                  ver: true, publicar: true, apagar: true },
   funcionario: { nome: "Funcionário", desc: "só cadastra, não apaga",        ver: true, publicar: true, apagar: false },
-  leitor:    { nome: "Cliente",    desc: "só vê as casas, não mexe em nada", ver: true, publicar: false, apagar: false }
+  leitor:    { nome: "Só ver",     desc: "não cadastra nem apaga",        ver: true, publicar: false, apagar: false }
 };
 const CODIGO_VALIDADE = 15 * 60 * 1000;   // o código do aparelho novo vale 15 min
 
+let modoAdmin = "";              // "" | "desenvolvedor" | "corretor"
 let usuarios = [];              // [{ usuario, senhaHash, cargo, desde }]
 let acesso = null;              // quem está logado agora
 let sessao = false;             // entrou nesta sessão do navegador?
@@ -1861,11 +1397,7 @@ async function iniciarAcesso() {
     gravarJSON(CHAVE_ACESSO, usuarios);
   }
 
-  // o login do Modo Desenvolvedor vale só para a visita atual:
-  // ao atualizar a página, a senha é pedida de novo
-  sessao = false;
-  try { sessionStorage.removeItem("publio-dev-logado"); } catch (_) {}
-  gravarJSON(CHAVE_ACESSO + "-sessao", false);
+  sessao = lerJSON(CHAVE_ACESSO + "-sessao", false) === true;
 
   const disp = lerJSON(CHAVE_DISPOSITIVOS, null);
   aparelhoId = (disp && disp.aparelhoId) || novoId();
@@ -1888,25 +1420,14 @@ function detectarNomeAparelho() {
   return sis ? `${tipo} ${sis}` : tipo;
 }
 
-let temColunaCargo = null;   // null = ainda não sei se o banco tem a coluna cargo
-
 /* Lê a lista de aparelhos da nuvem (tabela config_dispositivos) */
 async function lerDispositivos() {
   if (!NUVEM.ativa) return [];
   try {
-    const BASE_DISP = "id,nome,liberado,ver,publicar,apagar,vistoEm";
-    let r = await nuvemFetch(
-      sbUrl("config_dispositivos?select=" + BASE_DISP + (temColunaCargo ? ",cargo" : "") + "&order=vistoEm.desc&limit=200"),
+    const r = await nuvemFetch(
+      sbUrl("config_dispositivos?select=id,nome,liberado,ver,publicar,apagar,vistoEm&order=vistoEm.desc&limit=200"),
       { headers: sbHeaders(), cache: "no-store" }
     );
-    if (r.status === 400 && temColunaCargo !== false) {
-      temColunaCargo = false;   // banco antigo, sem a coluna cargo
-      r = await nuvemFetch(
-        sbUrl("config_dispositivos?select=" + BASE_DISP + "&order=vistoEm.desc&limit=200"),
-        { headers: sbHeaders(), cache: "no-store" }
-      );
-    }
-    if (!r.ok) throw new Error("servidor respondeu " + r.status);
     const linhas = await r.json();
     return (linhas || []).map((l) => ({
       id: String(l.id),
@@ -1915,7 +1436,6 @@ async function lerDispositivos() {
       ver: l.ver !== false,
       publicar: l.publicar !== false,
       apagar: l.apagar === true,
-      cargo: l.cargo || "",
       vistoEm: Number(l.vistoEm) || 0
     }));
   } catch (e) {
@@ -1925,24 +1445,13 @@ async function lerDispositivos() {
 }
 
 async function gravarDispositivo(d) {
-  if (!NUVEM.ativa) throw new Error("a nuvem não está configurada");
-  const linha = {
-    id: d.id, nome: d.nome, liberado: !!d.liberado, ver: !!d.ver,
-    publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now(),
-    cargo: d.cargo || (d.apagar && d.publicar ? "adm" : d.publicar ? "funcionario" : "cliente")
-  };
-  if (temColunaCargo === false) delete linha.cargo;
-  const r = await nuvemFetch(sbUrl("config_dispositivos?on_conflict=id"), {
+  if (!NUVEM.ativa) return false;
+  const linha = { id: d.id, nome: d.nome, liberado: !!d.liberado, ver: !!d.ver, publicar: !!d.publicar, apagar: !!d.apagar, vistoEm: d.vistoEm || Date.now() };
+  await nuvemFetch(sbUrl("config_dispositivos?on_conflict=id"), {
     method: "POST",
     headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify(linha)
   });
-  if (!r.ok) {
-    let detalhe = "";
-    try { detalhe = (await r.json()).message || ""; } catch (_) {}
-    throw new Error("o banco recusou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
-  }
-  temColunaCargo = true;
   return true;
 }
 
@@ -1955,12 +1464,9 @@ async function registrarAparelho() {
   try {
     if (meu) {
       meu.vistoEm = Date.now();
-      // aparelho que estava "aguardando liberação" vira cliente: entra sem pedir permissão
-      if (!meu.liberado) { meu.liberado = true; meu.publicar = false; meu.apagar = false; }
       await gravarDispositivo(meu);
     } else {
-      // já entra liberado, como cliente (só vê) — não precisa de aprovação de ninguém
-      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now(), liberado: true }, PERMISSOES_PADRAO));
+      await gravarDispositivo(Object.assign({ id: aparelhoId, nome: aparelhoNome, vistoEm: Date.now(), liberado: false }, PERMISSOES_PADRAO));
     }
   } catch (e) {
     console.warn("Não consegui registrar o aparelho:", e.message);
@@ -1974,74 +1480,48 @@ async function minhasPermissoes() {
   const meu = (lista || dispositivosCache || []).find((d) => d.id === aparelhoId);
   if (!meu) return Object.assign({}, PERMISSOES_PADRAO);
   if (!meu.liberado) {
-    // nunca mais fica travado: sem liberação o aparelho é cliente (só vê)
-    return { ver: true, publicar: false, apagar: false, cliente: true };
+    // aparelho ainda não aprovado: só vê, não mexe em nada
+    return { ver: true, publicar: false, apagar: false, bloqueado: true };
   }
-  // se o aparelho tem função definida (Cliente/Funcionário/ADM), ela manda
-  const chave = cargoDe(meu).chave;
-  if (CARGOS[chave] && meu.cargo) {
-    const def = CARGOS[chave];
-    return { ver: def.ver, publicar: def.publicar, apagar: def.apagar };
-  }
-  const def = CARGOS[chave] || CARGOS.leitor;
-  return { ver: def.ver, publicar: def.publicar, apagar: def.apagar };
+  return { ver: meu.ver, publicar: meu.publicar, apagar: meu.apagar };
 }
 
 /* Diz qual é o cargo do aparelho, para mostrar na tela */
 function cargoDe(d) {
-  if (d.cargo === "adm") return { nome: "ADM", classe: "adm", chave: "adm" };
-  if (d.cargo === "funcionario") return { nome: "Funcionário", classe: "func", chave: "funcionario" };
-  if (d.cargo === "leitor" || d.cargo === "cliente") return { nome: "Cliente", classe: "cliente", chave: "leitor" };
-  if (d.apagar && d.publicar) return { nome: "ADM", classe: "adm", chave: "adm" };
-  if (d.publicar) return { nome: "Funcionário", classe: "func", chave: "funcionario" };
-  return { nome: "Cliente", classe: "cliente", chave: "leitor" };   // padrão de todo aparelho novo: só vê
+  if (!d.liberado) return { nome: "Aguardando liberação", classe: "pendente" };
+  if (d.apagar && d.publicar) return { nome: "ADM", classe: "adm" };
+  if (d.publicar) return { nome: "Funcionário", classe: "func" };
+  return { nome: "Só ver", classe: "leitor" };
 }
 
 function ehAdmin() { return sessao === true; }
 
 async function abrirAdmin(modo) {
-  // modo pedido: "corretor" (padrão) ou "desenvolvedor"
-  modoPedido = modo === "desenvolvedor" ? "desenvolvedor" : "corretor";
-
-  // Área do desenvolvedor: pede a senha do dono TODA vez que é aberta
-  if (modoPedido === "desenvolvedor") {
-    sessao = false;
-    acesso = null;
-    gravarJSON(CHAVE_ACESSO + "-sessao", false);
-    const senhaAntiga = document.getElementById("loginSenha");
-    if (senhaAntiga) senhaAntiga.value = "";
-  }
+  modoAdmin = modo === "desenvolvedor" ? "desenvolvedor" : "corretor";
   mostrarTela("admin");
   const login = document.getElementById("adminLogin");
   const painel = document.getElementById("adminPainel");
   if (!login || !painel) return;
-
-  // cliente não usa a Área do corretor: só o aviso e o botão para a área do cliente
-  if (modoCliente && !sessao) {
-    mostrarBloqueioCliente(true);
-    return;
-  }
-  mostrarBloqueioCliente(false);
-
-  // o cartão do Modo Desenvolvedor é exclusivo de quem entrou com usuário e senha
   login.hidden = sessao;
   painel.hidden = !sessao;
-  document.body.classList.toggle("dev-logado", sessao === true);
   if (!sessao) {
+    login.style.display = "";        // garante que a caixa aparece, mesmo com CSS teimoso
+    login.style.visibility = "visible";
     const u = document.getElementById("loginUsuario");
     if (u) {
-      u.value = modoPedido === "desenvolvedor" ? DONO_USUARIO : (usuarios.length === 1 ? usuarios[0].usuario : "");
+      u.value = modo === "desenvolvedor" ? DONO_USUARIO : (usuarios.length === 1 ? usuarios[0].usuario : "");
       setTimeout(() => document.getElementById("loginSenha").focus(), 60);
     }
     const t = document.getElementById("loginTitulo");
-    if (t) t.textContent = modoPedido === "desenvolvedor" ? "Área do desenvolvedor" : "Área do corretor";
+    if (t) t.textContent = modo === "desenvolvedor" ? "Área do desenvolvedor" : "Área do corretor";
     const sub = document.getElementById("loginSub");
-    if (sub) sub.textContent = modoPedido === "desenvolvedor"
+    if (sub) sub.textContent = modo === "desenvolvedor"
       ? "Entre com o usuário e a senha do dono."
       : "Entre com seu usuário e senha.";
+    const senhaEl = document.getElementById("loginSenha");
+    if (senhaEl) senhaEl.value = "";
     aviso(document.getElementById("loginAviso"), "");
   } else {
-    mostrarBloqueioCliente(false);
     aplicarTelaPorCargo();
     await carregarPainelAdmin();
   }
@@ -2074,7 +1554,7 @@ function aplicarTelaPorCargo() {
   const textoCartaoAdm = document.getElementById("textoCartaoAdm");
   if (textoCartaoAdm && cargo === "desenvolvedor") {
     textoCartaoAdm.innerHTML = "Você tem acesso total: pode apagar imóveis de <b>todos os aparelhos</b>, criar usuários " +
-      "e <b>mudar a função de qualquer aparelho</b> — Cliente, Funcionário ou ADM. Use com cuidado: a exclusão não volta.";
+      "e mudar o cargo de qualquer aparelho — igual ao ADM. Use com cuidado: a exclusão não volta.";
   }
   const cartaoUsuarios = document.getElementById("cartaoUsuarios");
   if (cartaoUsuarios) cartaoUsuarios.hidden = !podeUsuarios;
@@ -2096,11 +1576,6 @@ function atualizarResumoAdm() {
   if (r4) r4.textContent = String(usuarios.length);
 }
 
-/* Cliente que tentou entrar na Área do corretor: volta para a área do cliente */
-function irParaAreaCliente() {
-  location.href = "publio-cliente.html";
-}
-
 async function tentarEntrar() {
   const avisoEl = document.getElementById("loginAviso");
   const agora = Date.now();
@@ -2112,24 +1587,39 @@ async function tentarEntrar() {
   const senha = document.getElementById("loginSenha").value || "";
   if (!usuario || !senha) { aviso(avisoEl, "Preencha usuário e senha.", true); return; }
   const hash = await sha256(senha);
-  const achou = usuarios.find((x) => String(x.usuario).toLowerCase() === usuario.toLowerCase() && x.senhaHash === hash);
-  if (achou) {
-    // Modo Desenvolvedor só aceita a conta do dono
-    if (modoPedido === "desenvolvedor" && achou.cargo !== "desenvolvedor") {
-      aviso(avisoEl, "Esta senha não é do dono. Use a senha do desenvolvedor.", true);
+
+  // ---- Área do desenvolvedor: só o dono entra, e já sai como Desenvolvedor ----
+  if (modoAdmin === "desenvolvedor") {
+    const ehDono = usuario.toLowerCase() === DONO_USUARIO.toLowerCase() && senha === DONO_SENHA;
+    if (ehDono) {
+      garantirDonoNaLista(hash);
+      acesso = usuarios.find((x) => String(x.usuario).toLowerCase() === DONO_USUARIO.toLowerCase());
+      sessao = true;
+      tentativasLogin = 0;
+      gravarJSON(CHAVE_ACESSO + "-sessao", true);
+      document.getElementById("loginSenha").value = "";
+      aviso(avisoEl, "");
+      await abrirAdmin("desenvolvedor");
+      await sincronizar();
+      renderLista();
       return;
     }
+    tentativasLogin++;
+    if (tentativasLogin >= 5) { bloqueadoAte = Date.now() + 60000; tentativasLogin = 0; }
+    aviso(avisoEl, "Usuário ou senha do dono incorretos.", true);
+    return;
+  }
+
+  const achou = usuarios.find((x) => String(x.usuario).toLowerCase() === usuario.toLowerCase() && x.senhaHash === hash);
+  if (achou) {
     acesso = achou;
     sessao = true;
     tentativasLogin = 0;
     gravarJSON(CHAVE_ACESSO + "-sessao", true);
-    try { sessionStorage.setItem("publio-dev-logado", "1"); } catch (_) {}
     document.getElementById("loginSenha").value = "";
     aviso(avisoEl, "");
-    // depois de entrar, o modo continua o que foi pedido (dev ou corretor)
-    await abrirAdmin(modoPedido);
+    await abrirAdmin(modoAdmin);
     await sincronizar();
-    await aplicarModoCliente();
     renderLista();
   } else {
     tentativasLogin++;
@@ -2141,9 +1631,9 @@ async function tentarEntrar() {
 function sairAdmin() {
   sessao = false;
   acesso = null;
+  modoAdmin = "corretor";
   gravarJSON(CHAVE_ACESSO + "-sessao", false);
   mostrarTela("painel");
-  aplicarModoCliente();
   renderLista();
 }
 
@@ -2160,28 +1650,22 @@ async function carregarPainelAdmin() {
   aviso(avisoEl, "");
   corpo.innerHTML = lista.map((d) => {
     const cargo = cargoDe(d);
+    const opcoes = Object.keys(CARGOS).map((k) =>
+      `<option value="${k}" ${cargo.classe === (k === "funcionario" ? "func" : k === "leitor" ? "leitor" : "adm") ? "selected" : ""}>${CARGOS[k].nome}</option>`
+    ).join("");
     const podeCargo = podeMudarCargo();
-    const aprovacao = "";   // todo aparelho já entra como cliente: não existe mais aprovar
+    const aprovacao = (d.liberado || !podeCargo) ? "" :
+      `<button type="button" class="btn btn-primario btn-mini" data-acao="aprovar">Aprovar</button>`;
     return `
     <tr data-id="${d.id}" class="${d.id === aparelhoId ? "eu" : ""} ${d.liberado ? "" : "pendente"}">
       <td><span class="disp-nome">${escapar(d.nome)}</span>${d.id === aparelhoId ? '<span class="sel-eu">este aparelho</span>' : ''}<span class="disp-id">${d.id.slice(0, 8)}</span></td>
       <td class="disp-data">${d.vistoEm ? quandoFoi(d.vistoEm) : "—"}</td>
-      <td class="celula-cargo">
-        ${podeCargo
-          ? `<div class="troca-cargo">
-               <button type="button" class="btn-cargo" data-acao="abrir-cargo" title="Mudar a função deste aparelho" aria-haspopup="listbox" aria-expanded="false">
-                 <span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>
-                 <span class="seta-cargo" aria-hidden="true">▾</span>
-               </button>
-               <div class="lista-cargo" role="listbox" hidden>
-                 ${Object.keys(CARGOS).map((k) =>
-                   `<button type="button" class="op-cargo${cargo.chave === k ? " ativa" : ""}" role="option" data-cargo="${k}">
-                      <span class="op-nome">${CARGOS[k].nome}</span>
-                      <span class="op-desc">${CARGOS[k].desc || ""}</span>
-                    </button>`).join("")}
-               </div>
-             </div>`
-          : `<span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>`}
+      <td>
+        ${d.liberado
+          ? (podeCargo
+              ? `<select class="sel-cargo" data-acao="cargo">${opcoes}</select>`
+              : `<span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>`)
+          : `<span class="selo-cargo pendente">Aguardando liberação</span>`}
       </td>
       <td class="acoes-aparelho">
         ${aprovacao}
@@ -2195,6 +1679,9 @@ async function carregarPainelAdmin() {
   if (bNovo) bNovo.hidden = !podeGerenciarUsuarios();
   const boxAdd = document.getElementById("boxAdicionarAparelho");
   if (boxAdd) boxAdd.hidden = !podeMudarCargo();
+  // o link da Área do cliente só aparece para o Desenvolvedor
+  const linkCli = document.getElementById("btnAreaCliente");
+  if (linkCli) linkCli.hidden = !podeMudarCargo();
   atualizarResumoAdm();
 }
 
@@ -2226,18 +1713,24 @@ async function aplicarCargo(id, cargo) {
   const d = lista.find((x) => x.id === id);
   const def = CARGOS[cargo];
   if (!d || !def) return;
+  if (id === aparelhoId && cargo !== "adm") {
+    if (!confirm(`Tirar o modo ADM DESTE aparelho (o seu)? Você ainda pode voltar a liberar por aqui, mas perde o botão de excluir enquanto estiver logado.`)) {
+      await carregarPainelAdmin();
+      return;
+    }
+  }
   d.liberado = true;
   d.ver = def.ver;
   d.publicar = def.publicar;
   d.apagar = def.apagar;
-  d.cargo = cargo;
   try {
     await gravarDispositivo(d);
     aviso(document.getElementById("dispAviso"), `Aparelho "${d.nome}" agora é ${def.nome}.`);
+    await carregarPainelAdmin();
   } catch (e) {
-    aviso(document.getElementById("dispAviso"), "Não consegui mudar a função: " + e.message, true);
+    aviso(document.getElementById("dispAviso"), "Não consegui salvar: " + e.message, true);
+    await carregarPainelAdmin();
   }
-  await carregarPainelAdmin();
 }
 
 /* Aprova um aparelho que pediu acesso */
@@ -2354,9 +1847,7 @@ async function nuvemGravarPedido(codigo, dados) {
 async function nuvemLerPedido(codigo) {
   if (!NUVEM.ativa) return null;
   const r = await nuvemFetch(sbUrl("pedidos_acesso?select=codigo,aparelhoId,nome,criadoEm&codigo=eq." + encodeURIComponent(codigo)));
-  if (!r || !r.ok) return null;
-  const lista = await r.json();
-  const linha = (lista && lista[0]) || null;
+  const linha = (r && r[0]) || null;
   return linha ? { codigo: linha.codigo, id: linha.aparelhoId, nome: linha.nome, criadoEm: Number(linha.criadoEm) || 0 } : null;
 }
 
@@ -2368,20 +1859,26 @@ async function nuvemApagarPedido(codigo) {
   return true;
 }
 
-/* Todo aparelho novo já entra como cliente (só vê as casas).
-   Então não existe mais "pedido de acesso": a caixa de código nunca aparece. */
 async function mostrarPedidoSePreciso() {
   const caixa = document.getElementById("caixaPedido");
-  if (caixa) caixa.hidden = true;
+  if (!caixa) return;
+  const perms = await minhasPermissoes();
+  const pendente = !sessao && (perms.bloqueado || !perms.publicar && !perms.apagar);
+  if (!pendente || location.hash) { caixa.hidden = true; return; }
+  let codigo = "------";
+  try { codigo = await garantirPedido(); }
+  catch (e) {
+    const av = document.getElementById("avisoPedido");
+    if (av) aviso(av, "Não consegui gerar o código agora: " + e.message, true);
+  }
+  document.getElementById("codigoMeuAparelho").textContent = codigo;
+  caixa.hidden = false;
 }
 
 async function removerAparelho(id) {
   const d = (dispositivosCache || []).find((x) => x.id === id);
   if (!d) return;
-  const digitou = prompt(
-    `Remover o aparelho "${d.nome}"?\n\nEle volta como Cliente (só vê as casas) se abrir o site de novo.\n` +
-    `Para confirmar, digite REMOVER:`);
-  if (!digitou || digitou.trim().toUpperCase() !== "REMOVER") return;
+  if (!confirm(`Remover o aparelho "${d.nome}"? Ele volta para as permissões padrão.`)) return;
   try {
     await nuvemFetch(sbUrl(`config_dispositivos?id=eq.${encodeURIComponent(id)}`), {
       method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" })
@@ -2459,6 +1956,18 @@ async function salvarCredenciais() {
   renderUsuarios();
   fecharFormUsuario();
   aviso(avisoEl, msg);
+}
+
+/* Garante que o dono está na lista como Desenvolvedor (usado no login dele) */
+function garantirDonoNaLista(hashDono) {
+  const dono = usuarios.find((x) => String(x.usuario).toLowerCase() === DONO_USUARIO.toLowerCase());
+  if (dono) {
+    dono.cargo = "desenvolvedor";
+    dono.senhaHash = hashDono;
+  } else {
+    usuarios.unshift({ usuario: DONO_USUARIO, senhaHash: hashDono, cargo: "desenvolvedor", desde: Date.now() });
+  }
+  gravarUsuarios();
 }
 
 /* Abre o formulário de usuário (novo ou troca de senha) */
@@ -2549,20 +2058,11 @@ function trocarSenhaDe(nome) {
 }
 
 /* Liga os botões da área do corretor */
-/* fecha as listas de cargo abertas na tabela de aparelhos */
-function fecharListasCargo() {
-  document.querySelectorAll("#listaDispositivos .lista-cargo").forEach((l) => { l.hidden = true; });
-  document.querySelectorAll("#listaDispositivos .btn-cargo").forEach((b) => b.setAttribute("aria-expanded", "false"));
-}
-
 function ligarAdmin() {
   const btnAdmin = document.getElementById("btnAdmin");
   if (btnAdmin) btnAdmin.addEventListener("click", () => abrirAdmin());
   const bEntrar = document.getElementById("btnEntrar");
   if (bEntrar) bEntrar.addEventListener("click", tentarEntrar);
-  const bIrCliente = document.getElementById("btnIrAreaCliente");
-  if (bIrCliente) bIrCliente.addEventListener("click", irParaAreaCliente);
-
   const bVoltar = document.getElementById("btnSairAdmin");
   if (bVoltar) bVoltar.addEventListener("click", () => mostrarTela("painel"));
   const bSair = document.getElementById("btnSair");
@@ -2591,46 +2091,17 @@ function ligarAdmin() {
 
   const corpo = document.getElementById("listaDispositivos");
   if (corpo) {
+    corpo.addEventListener("change", (ev) => {
+      const sel = ev.target.closest("select[data-acao='cargo']");
+      if (!sel) return;
+      aplicarCargo(sel.closest("tr").dataset.id, sel.value);
+    });
     corpo.addEventListener("click", (ev) => {
-      const linha = ev.target.closest("tr");
-      const id = linha ? linha.dataset.id : "";
-
-      // 1) clicou na seta: abre/fecha a lista de cargos daquele aparelho
-      const abrir = ev.target.closest("button[data-acao='abrir-cargo']");
-      if (abrir) {
-        const lista = abrir.parentElement.querySelector(".lista-cargo");
-        const jaAberta = lista && !lista.hidden;
-        fecharListasCargo();
-        if (lista && !jaAberta) {
-          lista.hidden = false;
-          abrir.setAttribute("aria-expanded", "true");
-          const r = abrir.getBoundingClientRect();
-          if (r.bottom > window.innerHeight - 160) lista.classList.add("para-cima");
-        }
-        return;
-      }
-
-      // 2) clicou num cargo da lista: muda a função na hora
-      const op = ev.target.closest("button[data-cargo]");
-      if (op) {
-        fecharListasCargo();
-        aplicarCargo(id, op.dataset.cargo);
-        return;
-      }
-
-      // 3) outros botões da linha
       const b = ev.target.closest("button[data-acao]");
-      if (!b) { fecharListasCargo(); return; }
+      if (!b) return;
+      const id = b.closest("tr").dataset.id;
       if (b.dataset.acao === "remover-aparelho") removerAparelho(id);
       else if (b.dataset.acao === "aprovar") aprovarAparelho(id, "funcionario");
-    });
-
-    // clicou fora: fecha a lista
-    document.addEventListener("click", (ev) => {
-      if (!ev.target.closest(".troca-cargo")) fecharListasCargo();
-    });
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") fecharListasCargo();
     });
   }
 
