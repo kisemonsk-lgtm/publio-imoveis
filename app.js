@@ -1949,6 +1949,10 @@ async function minhasPermissoes() {
   }
   // se o aparelho tem função definida (Cliente/Funcionário/ADM), ela manda
   const chave = cargoDe(meu).chave;
+  if (CARGOS[chave] && meu.cargo) {
+    const def = CARGOS[chave];
+    return { ver: def.ver, publicar: def.publicar, apagar: def.apagar };
+  }
   const def = CARGOS[chave] || CARGOS.leitor;
   return { ver: def.ver, publicar: def.publicar, apagar: def.apagar };
 }
@@ -2309,7 +2313,10 @@ async function mostrarPedidoSePreciso() {
 async function removerAparelho(id) {
   const d = (dispositivosCache || []).find((x) => x.id === id);
   if (!d) return;
-  if (!confirm(`Remover o aparelho "${d.nome}"? Se ele abrir o site de novo, volta como Cliente (só vê as casas).`)) return;
+  const digitou = prompt(
+    `Remover o aparelho "${d.nome}"?\n\nEle volta como Cliente (só vê as casas) se abrir o site de novo.\n` +
+    `Para confirmar, digite REMOVER:`);
+  if (!digitou || digitou.trim().toUpperCase() !== "REMOVER") return;
   try {
     await nuvemFetch(sbUrl(`config_dispositivos?id=eq.${encodeURIComponent(id)}`), {
       method: "DELETE", headers: sbHeaders({ "Prefer": "return=minimal" })
