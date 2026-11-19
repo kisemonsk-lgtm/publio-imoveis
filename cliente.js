@@ -21,7 +21,7 @@
 
   var imoveis = [];
   var filtro = "";
-  var finalidadeAtual = "";
+  var finalidadeAtual = "Venda";
   var tipoAtual = "";
   var buscando = false;
 
