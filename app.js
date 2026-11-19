@@ -1119,6 +1119,8 @@ async function rotear() {
 
 /* O botão da Área do desenvolvedor precisa funcionar mesmo que o início ainda esteja carregando */
 function ligarBotaoDesenvolvedor() {
+  const lc = document.getElementById("btnAreaCliente");
+  if (lc && !podeMudarCargo()) lc.hidden = true;
   const b = document.getElementById("btnDesenvolvedor");
   if (!b || b._ligado) return;
   b._ligado = true;
@@ -1671,7 +1673,8 @@ async function carregarPainelAdmin() {
   if (bNovo) bNovo.hidden = !podeGerenciarUsuarios();
   const boxAdd = document.getElementById("boxAdicionarAparelho");
   if (boxAdd) boxAdd.hidden = !podeMudarCargo();
-  const linkCli = document.getElementById("btnAreaClienteDev");
+  // o link da Área do cliente só aparece para o Desenvolvedor
+  const linkCli = document.getElementById("btnAreaCliente");
   if (linkCli) linkCli.hidden = !podeMudarCargo();
   atualizarResumoAdm();
 }
