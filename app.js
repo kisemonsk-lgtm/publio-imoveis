@@ -601,6 +601,22 @@ function linkDaFicha(im) {
 }
 
 /* ---------------- Formulário ---------------- */
+/* Se o imóvel tiver uma finalidade que não está na lista, acrescenta a opção */
+function garantirOpcaoFinalidade(valor) {
+  var sel = $("#f-finalidade");
+  if (!sel || !valor) return;
+  var existe = false;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === valor) { existe = true; break; }
+  }
+  if (!existe) {
+    var op = document.createElement("option");
+    op.textContent = valor;
+    op.value = valor;
+    sel.appendChild(op);
+  }
+}
+
 function limparForm() {
   editandoId = null;
   imagemAtual = [];
@@ -616,6 +632,7 @@ function preencherForm(im) {
   imagemAtual = imagensDe(im).slice();
   $("#f-titulo").value = im.titulo || "";
   $("#f-tipo").value = im.tipo || "Casa";
+  garantirOpcaoFinalidade(im.finalidade);
   $("#f-finalidade").value = im.finalidade || "Venda";
   $("#f-preco").value = im.preco || "";
   $("#f-local").value = im.local || "";
