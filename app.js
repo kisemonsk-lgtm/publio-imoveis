@@ -1671,6 +1671,8 @@ async function carregarPainelAdmin() {
   if (bNovo) bNovo.hidden = !podeGerenciarUsuarios();
   const boxAdd = document.getElementById("boxAdicionarAparelho");
   if (boxAdd) boxAdd.hidden = !podeMudarCargo();
+  const linkCli = document.getElementById("btnAreaClienteDev");
+  if (linkCli) linkCli.hidden = !podeMudarCargo();
   atualizarResumoAdm();
 }
 
