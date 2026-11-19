@@ -265,6 +265,8 @@
       img.src = fotos[fotoAtiva];
       $("#casaModalSemFoto").hidden = true;
       preencherVizinhas(fotos);
+      var camadaZ = $("#zoomCamada");
+      if (camadaZ && !camadaZ.hidden) { zoomEscala = 1; zoomX = 0; zoomY = 0; $("#zoomImagem").src = fotos[fotoAtiva]; aplicarZoom(false); }
     }
     var total = fotos.length;
     $("#setaEsqCasa").hidden = total <= 1;
@@ -319,7 +321,143 @@
     }, 280);
   }
 
+  /* ================= ZOOM DA FOTO ================= */
+  var zoomEscala = 1, zoomX = 0, zoomY = 0;
+
+  function aplicarZoom(animar) {
+    var img = $("#zoomImagem");
+    if (!img) return;
+    var camada = $("#zoomCamada");
+    if (animar) {
+      img.classList.add("animando");
+      setTimeout(function () { img.classList.remove("animando"); }, 220);
+    } else {
+      img.classList.remove("animando");
+    }
+    img.style.transform = "translate3d(" + zoomX + "px," + zoomY + "px,0) scale(" + zoomEscala + ")";
+    if (camada && zoomEscala > 1.01 && !animar) camada.classList.add("mexeu");
+  }
+
+  function limitarDeslocamento() {
+    var camada = $("#zoomCamada");
+    var img = $("#zoomImagem");
+    if (!camada || !img) return;
+    var lw = camada.clientWidth, lh = camada.clientHeight;
+    var iw = img.clientWidth * zoomEscala, ih = img.clientHeight * zoomEscala;
+    var maxX = Math.max(0, (iw - lw) / 2);
+    var maxY = Math.max(0, (ih - lh) / 2);
+    if (zoomX > maxX) zoomX = maxX;
+    if (zoomX < -maxX) zoomX = -maxX;
+    if (zoomY > maxY) zoomY = maxY;
+    if (zoomY < -maxY) zoomY = -maxY;
+  }
+
+  function abrirZoom() {
+    if (!casaAberta) return;
+    var fotos = imagensDe(casaAberta);
+    if (!fotos.length) return;
+    var camada = $("#zoomCamada");
+    var img = $("#zoomImagem");
+    if (!camada || !img) return;
+    zoomEscala = 1; zoomX = 0; zoomY = 0;
+    img.src = fotos[fotoAtiva];
+    camada.classList.remove("mexeu");
+    camada.hidden = false;
+    aplicarZoom(false);
+  }
+
+  function fecharZoom() {
+    var camada = $("#zoomCamada");
+    if (camada) camada.hidden = true;
+    zoomEscala = 1; zoomX = 0; zoomY = 0;
+  }
+
+  function ligarZoom() {
+    var camada = $("#zoomCamada");
+    var img = $("#zoomImagem");
+    var fecharZ = $("#zoomFechar");
+    if (!camada || !img) return;
+    if (fecharZ) fecharZ.addEventListener("click", fecharZoom);
+
+    var toques = {}, iniciou = {}, escalaInicial = 1, distInicial = 0, moveu = false;
+
+    function distancia(t) {
+      var a = t[0], b = t[1];
+      return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    }
+
+    camada.addEventListener("touchstart", function (ev) {
+      if (ev.touches.length === 2) {
+        distInicial = distancia(ev.touches);
+        escalaInicial = zoomEscala;
+        moveu = true;
+      } else if (ev.touches.length === 1) {
+        toques.x = ev.touches[0].clientX;
+        toques.y = ev.touches[0].clientY;
+        iniciou.x = zoomX; iniciou.y = zoomY;
+        moveu = false;
+      }
+    }, { passive: true });
+
+    camada.addEventListener("touchmove", function (ev) {
+      if (ev.touches.length === 2) {
+        var d = distancia(ev.touches);
+        if (distInicial > 0) {
+          zoomEscala = Math.min(5, Math.max(1, escalaInicial * (d / distInicial)));
+          limitarDeslocamento();
+          aplicarZoom(false);
+        }
+        ev.preventDefault();
+      } else if (ev.touches.length === 1 && zoomEscala > 1) {
+        var dx = ev.touches[0].clientX - toques.x;
+        var dy = ev.touches[0].clientY - toques.y;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moveu = true;
+        zoomX = iniciou.x + dx;
+        zoomY = iniciou.y + dy;
+        limitarDeslocamento();
+        aplicarZoom(false);
+        ev.preventDefault();
+      }
+    }, { passive: false });
+
+    camada.addEventListener("touchend", function (ev) {
+      if (zoomEscala <= 1.02) {
+        zoomEscala = 1; zoomX = 0; zoomY = 0;
+        aplicarZoom(true);
+      }
+      // toque simples (sem arrastar) em zoom 1x: amplia no ponto tocado
+      if (!moveu && ev.changedTouches.length === 1 && zoomEscala <= 1.02 && !ev.touches.length) {
+        var cx = ev.changedTouches[0].clientX, cy = ev.changedTouches[0].clientY;
+        var r = camada.getBoundingClientRect();
+        var px = (cx - r.left - r.width / 2);
+        var py = (cy - r.top - r.height / 2);
+        zoomEscala = 2.2;
+        zoomX = -px * 1.2;
+        zoomY = -py * 1.2;
+        limitarDeslocamento();
+        aplicarZoom(true);
+      }
+    }, { passive: true });
+
+    // roda do mouse / trackpad (computador)
+    camada.addEventListener("wheel", function (ev) {
+      ev.preventDefault();
+      zoomEscala = Math.min(5, Math.max(1, zoomEscala * (ev.deltaY < 0 ? 1.12 : 0.9)));
+      if (zoomEscala <= 1.01) { zoomX = 0; zoomY = 0; }
+      limitarDeslocamento();
+      aplicarZoom(false);
+    }, { passive: false });
+
+    camada.addEventListener("dblclick", function (ev) {
+      ev.preventDefault();
+      if (zoomEscala > 1.05) { zoomEscala = 1; zoomX = 0; zoomY = 0; }
+      else { zoomEscala = 2.2; limitarDeslocamento(); }
+      aplicarZoom(true);
+    });
+  }
+
   function fecharCasa() {
+    fecharZoom();
     var modal = $("#casaModal");
     if (modal) modal.hidden = true;
     document.body.classList.remove("casa-aberta");
@@ -383,6 +521,8 @@
       carregar(true).then(function () { btnAtualizar.classList.remove("girando"); });
     });
 
+    ligarZoom();
+
     var fechar = $("#casaModalFechar");
     if (fechar) fechar.addEventListener("click", fecharCasa);
     var fundo = $("#casaModal");
@@ -398,6 +538,19 @@
       var b = ev.target.closest(".mini-foto");
       if (b) pintarFoto(Number(b.dataset.foto));
     });
+
+    // abrir o zoom tocando na foto
+    var btnZoom = $("#btnZoomCasa");
+    if (btnZoom) btnZoom.addEventListener("click", function (ev) { ev.stopPropagation(); abrirZoom(); });
+    var palco0 = $("#casaModalPalco");
+    if (palco0) {
+      palco0.addEventListener("click", function (ev) {
+        var alvo = ev.target;
+        if (alvo && (alvo.closest("button") || alvo.classList.contains("casa-modal-contador"))) return;
+        if (ev.target && ev.target.closest("#casaModalSemFoto")) return;
+        abrirZoom();
+      });
+    }
 
     // arrastar a foto no celular: a imagem acompanha o dedo
     var palco = $("#casaModalPalco");
@@ -456,7 +609,11 @@
 
     document.addEventListener("keydown", function (ev) {
       if (!casaAberta) return;
-      if (ev.key === "Escape") fecharCasa();
+      if (ev.key === "Escape") {
+        var camadaZ = $("#zoomCamada");
+        if (camadaZ && !camadaZ.hidden) { fecharZoom(); return; }
+        fecharCasa();
+      }
       if (ev.key === "ArrowLeft") pintarFoto(fotoAtiva - 1);
       if (ev.key === "ArrowRight") pintarFoto(fotoAtiva + 1);
     });
