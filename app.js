@@ -107,7 +107,14 @@ function sbHeaders(extra = {}) {
 function sbUrl(caminho) {
   return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho;
 }
-const CAMPOS_IMOVEL = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,videos,criadoEm,atualizadoEm";
+const CAMPOS_BASE = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
+/* A coluna "videos" pode ainda não existir no banco (o SUPABASE.sql cria).
+   Se ela faltar, o site continua funcionando sem vídeos em vez de dizer
+   "sem conexão com a nuvem". */
+let temColunaVideos = null;               // null = ainda não sei
+function camposImovel() {
+  return temColunaVideos === false ? CAMPOS_BASE : (CAMPOS_BASE + ",videos");
+}
 
 async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
   let ultimo;
@@ -128,7 +135,15 @@ async function nuvemFetch(url, opcoes = {}, tentativas = 3) {
 /* Lê todos os imóveis da nuvem */
 async function nuvemLer() {
   if (!NUVEM.ativa) return null;
-  const r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_IMOVEL}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
+  let r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${camposImovel()}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
+  if (r.status === 400 && temColunaVideos !== false) {
+    // o banco ainda não tem a coluna dos vídeos: lê sem ela e avisa uma vez
+    temColunaVideos = false;
+    console.warn("A coluna 'videos' ainda não existe no Supabase — rode o SUPABASE.sql. Seguindo sem vídeos.");
+    r = await nuvemFetch(sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_BASE}&limit=500`), { headers: sbHeaders(), cache: "no-store" });
+  } else if (r.ok) {
+    temColunaVideos = true;
+  }
   const linhas = await r.json();
   return (linhas || []).map((l) => ({
     id: String(l.id),
@@ -150,7 +165,7 @@ async function nuvemLer() {
 async function nuvemLerUm(id) {
   if (!NUVEM.ativa) return null;
   const r = await nuvemFetch(
-    sbUrl(`${SUPABASE.tabela}?select=${CAMPOS_IMOVEL}&id=eq.${encodeURIComponent(id)}&limit=1`),
+    sbUrl(`${SUPABASE.tabela}?select=${camposImovel()}&id=eq.${encodeURIComponent(id)}&limit=1`),
     { headers: sbHeaders(), cache: "no-store" }
   );
   const linhas = await r.json();
@@ -166,6 +181,7 @@ async function nuvemLerUm(id) {
     descricao: l.descricao || "",
     imagem: l.imagem || "",
     imagens: Array.isArray(l.imagens) ? l.imagens : (l.imagem ? [l.imagem] : []),
+    videos: Array.isArray(l.videos) ? l.videos.filter(Boolean) : [],
     criadoEm: Number(l.criadoEm) || Date.now(),
     atualizadoEm: Number(l.atualizadoEm) || Date.now()
   };
@@ -188,11 +204,23 @@ async function nuvemSalvarUm(im) {
     criadoEm: im.criadoEm || Date.now(),
     atualizadoEm: im.atualizadoEm || Date.now()
   };
-  await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), {
+  const opcoes = {
     method: "POST",
     headers: sbHeaders({ "Prefer": "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify(linha)
-  });
+  };
+  try {
+    await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), opcoes);
+    temColunaVideos = true;
+  } catch (e) {
+    if (!/videos|42703/i.test(e.message)) throw e;
+    // banco sem a coluna dos vídeos: grava o resto do imóvel e segue
+    temColunaVideos = false;
+    const semVideos = Object.assign({}, linha);
+    delete semVideos.videos;
+    console.warn("A coluna 'videos' ainda não existe no Supabase — o imóvel foi salvo sem vídeos. Rode o SUPABASE.sql.");
+    await nuvemFetch(sbUrl(`${SUPABASE.tabela}?on_conflict=id`), Object.assign({}, opcoes, { body: JSON.stringify(semVideos) }));
+  }
   return true;
 }
 

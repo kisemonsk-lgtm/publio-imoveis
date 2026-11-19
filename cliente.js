@@ -54,9 +54,23 @@
   function sbUrl(caminho) { return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho; }
 
   /* ---------------- leitura (só GET) ---------------- */
+  var CAMPOS_BASE = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
+  var temColunaVideos = null;
+
   function lerImoveis() {
-    var url = sbUrl(SUPABASE.tabela + "?select=" + CAMPOS + "&limit=500");
+    var campos = temColunaVideos === false ? CAMPOS_BASE : (CAMPOS + ",videos");
+    var url = sbUrl(SUPABASE.tabela + "?select=" + campos + "&limit=500");
     return fetch(url, { headers: sbHeaders(), cache: "no-store" }).then(function (r) {
+      if (r.status === 400 && temColunaVideos !== false) {
+        // banco ainda sem a coluna dos vídeos: lê sem ela em vez de ficar sem conexão
+        temColunaVideos = false;
+        return fetch(sbUrl(SUPABASE.tabela + "?select=" + CAMPOS_BASE + "&limit=500"),
+          { headers: sbHeaders(), cache: "no-store" });
+      }
+      if (r.ok) temColunaVideos = true;
+      if (!r.ok) throw new Error("servidor respondeu " + r.status);
+      return r;
+    }).then(function (r) {
       if (!r.ok) throw new Error("servidor respondeu " + r.status);
       return r.json();
     }).then(function (linhas) {
