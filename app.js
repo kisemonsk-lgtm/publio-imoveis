@@ -1861,7 +1861,11 @@ async function iniciarAcesso() {
     gravarJSON(CHAVE_ACESSO, usuarios);
   }
 
-  sessao = lerJSON(CHAVE_ACESSO + "-sessao", false) === true;
+  // o login do Modo Desenvolvedor vale só para a visita atual:
+  // ao atualizar a página, a senha é pedida de novo
+  sessao = false;
+  try { sessionStorage.removeItem("publio-dev-logado"); } catch (_) {}
+  gravarJSON(CHAVE_ACESSO + "-sessao", false);
 
   const disp = lerJSON(CHAVE_DISPOSITIVOS, null);
   aparelhoId = (disp && disp.aparelhoId) || novoId();
@@ -1998,6 +2002,15 @@ function ehAdmin() { return sessao === true; }
 async function abrirAdmin(modo) {
   // modo pedido: "corretor" (padrão) ou "desenvolvedor"
   modoPedido = modo === "desenvolvedor" ? "desenvolvedor" : "corretor";
+
+  // Área do desenvolvedor: pede a senha do dono TODA vez que é aberta
+  if (modoPedido === "desenvolvedor") {
+    sessao = false;
+    acesso = null;
+    gravarJSON(CHAVE_ACESSO + "-sessao", false);
+    const senhaAntiga = document.getElementById("loginSenha");
+    if (senhaAntiga) senhaAntiga.value = "";
+  }
   mostrarTela("admin");
   const login = document.getElementById("adminLogin");
   const painel = document.getElementById("adminPainel");
@@ -2015,13 +2028,13 @@ async function abrirAdmin(modo) {
   if (!sessao) {
     const u = document.getElementById("loginUsuario");
     if (u) {
-      u.value = modo === "desenvolvedor" ? DONO_USUARIO : (usuarios.length === 1 ? usuarios[0].usuario : "");
+      u.value = modoPedido === "desenvolvedor" ? DONO_USUARIO : (usuarios.length === 1 ? usuarios[0].usuario : "");
       setTimeout(() => document.getElementById("loginSenha").focus(), 60);
     }
     const t = document.getElementById("loginTitulo");
-    if (t) t.textContent = modo === "desenvolvedor" ? "Área do desenvolvedor" : "Área do corretor";
+    if (t) t.textContent = modoPedido === "desenvolvedor" ? "Área do desenvolvedor" : "Área do corretor";
     const sub = document.getElementById("loginSub");
-    if (sub) sub.textContent = modo === "desenvolvedor"
+    if (sub) sub.textContent = modoPedido === "desenvolvedor"
       ? "Entre com o usuário e a senha do dono."
       : "Entre com seu usuário e senha.";
     aviso(document.getElementById("loginAviso"), "");
@@ -2099,13 +2112,20 @@ async function tentarEntrar() {
   const hash = await sha256(senha);
   const achou = usuarios.find((x) => String(x.usuario).toLowerCase() === usuario.toLowerCase() && x.senhaHash === hash);
   if (achou) {
+    // Modo Desenvolvedor só aceita a conta do dono
+    if (modoPedido === "desenvolvedor" && achou.cargo !== "desenvolvedor") {
+      aviso(avisoEl, "Esta senha não é do dono. Use a senha do desenvolvedor.", true);
+      return;
+    }
     acesso = achou;
     sessao = true;
     tentativasLogin = 0;
     gravarJSON(CHAVE_ACESSO + "-sessao", true);
+    try { sessionStorage.setItem("publio-dev-logado", "1"); } catch (_) {}
     document.getElementById("loginSenha").value = "";
     aviso(avisoEl, "");
-    await abrirAdmin();
+    // depois de entrar, o modo continua o que foi pedido (dev ou corretor)
+    await abrirAdmin(modoPedido);
     await sincronizar();
     await aplicarModoCliente();
     renderLista();
