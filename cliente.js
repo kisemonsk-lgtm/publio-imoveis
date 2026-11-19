@@ -81,6 +81,8 @@
           titulo: l.titulo || "",
           tipo: l.tipo || "",
           finalidade: l.finalidade || "",
+        telefone: l.telefone || "",
+          telefone: l.telefone || "",
           preco: l.preco || "",
           local: l.local || "",
           descricao: l.descricao || "",
@@ -224,6 +226,7 @@
     $("#casaModalLocal").textContent = im.local || "";
     $("#casaModalEtiqueta").textContent = [im.tipo, im.finalidade].filter(Boolean).join(" • ");
     $("#casaModalPreco").textContent = im.preco ? fmtPreco(im.preco) : "";
+    pintarContato(im);
     $("#casaModalDescricao").textContent = im.descricao || "";
     $("#casaModalDescricao").hidden = !im.descricao;
 
@@ -249,6 +252,28 @@
     modal.hidden = false;
     document.body.classList.add("casa-aberta");
     try { $("#casaModalFechar").focus({ preventScroll: true }); } catch (_) {}
+  }
+
+  /* Deixa o telefone só com números, no formato que o WhatsApp espera */
+  function numeroWhats(tel) {
+    var d = String(tel || "").replace(/\D/g, "");
+    if (!d) return "";
+    if (d.length <= 11) d = "55" + d;       // Brasil por padrão
+    return d;
+  }
+
+  function pintarContato(im) {
+    var caixa = $("#casaModalContato");
+    if (!caixa) return;
+    var tel = (im && im.telefone || "").trim();
+    var num = numeroWhats(tel);
+    if (!num) { caixa.hidden = true; return; }
+    caixa.hidden = false;
+    var wa = $("#btnWhatsCasa");
+    var ligar = $("#btnLigarCasa");
+    var msg = "Olá! Vi o imóvel \"" + (im.titulo || "") + "\" no Públio Imóveis e gostaria de mais informações.";
+    if (wa) wa.href = "https://wa.me/" + num + "?text=" + encodeURIComponent(msg);
+    if (ligar) ligar.href = "tel:+" + num;
   }
 
   function pintarFoto(i) {

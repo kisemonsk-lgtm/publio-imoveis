@@ -135,6 +135,7 @@ async function nuvemLer() {
     titulo: l.titulo || "",
     tipo: l.tipo || "",
     finalidade: l.finalidade || "",
+    telefone: l.telefone || "",
     preco: l.preco || "",
     local: l.local || "",
     descricao: l.descricao || "",
@@ -160,6 +161,7 @@ async function nuvemLerUm(id) {
     titulo: l.titulo || "",
     tipo: l.tipo || "",
     finalidade: l.finalidade || "",
+    telefone: l.telefone || "",
     preco: l.preco || "",
     local: l.local || "",
     descricao: l.descricao || "",
@@ -178,6 +180,7 @@ async function nuvemSalvarUm(im) {
     titulo: im.titulo || "",
     tipo: im.tipo || "",
     finalidade: im.finalidade || "",
+    telefone: im.telefone || "",
     preco: im.preco || "",
     local: im.local || "",
     descricao: im.descricao || "",
@@ -634,6 +637,8 @@ function preencherForm(im) {
   $("#f-tipo").value = im.tipo || "Casa";
   garantirOpcaoFinalidade(im.finalidade);
   $("#f-finalidade").value = im.finalidade || "Venda";
+  var telEl = $("#f-telefone");
+  if (telEl) telEl.value = im.telefone || "";
   $("#f-preco").value = im.preco || "";
   $("#f-local").value = im.local || "";
   $("#f-descricao").value = im.descricao || "";
@@ -704,6 +709,7 @@ async function salvarForm(ev) {
     titulo,
     tipo: $("#f-tipo").value,
     finalidade: $("#f-finalidade").value,
+    telefone: (($("#f-telefone") && $("#f-telefone").value) || "").trim(),
     preco: $("#f-preco").value.trim(),
     local: $("#f-local").value.trim(),
     descricao: $("#f-descricao").value.trim(),
