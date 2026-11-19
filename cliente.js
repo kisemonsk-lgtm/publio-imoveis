@@ -21,6 +21,7 @@
 
   var imoveis = [];
   var filtro = "";
+  var finalidadeAtual = "Venda";   // Venda ou Aluguel: a primeira escolha
   var tipoAtual = "";
   var buscando = false;
 
@@ -149,7 +150,24 @@
     if (caixa) { caixa.hidden = true; caixa.innerHTML = ""; }
   }
 
+  /* "Aluguel", "Aluguel mensal", "Locação" -> aluguel | "Venda" -> venda */
+  function ehAluguel(f) {
+    return /alug|loca/i.test(String(f || ""));
+  }
+  function ehVenda(f) {
+    return /vend/i.test(String(f || ""));
+  }
+
+  function passaNaFinalidade(im) {
+    if (!finalidadeAtual) return true;                       // "Todos"
+    var f = im.finalidade || "";
+    if (finalidadeAtual === "Aluguel") return ehAluguel(f) || (!ehVenda(f) && /alug|loca|mensal/i.test(im.descricao || ""));
+    if (finalidadeAtual === "Venda") return ehVenda(f) || (!ehAluguel(f) && !/alug|loca|mensal/i.test(im.descricao || ""));
+    return true;
+  }
+
   function passaNoFiltro(im) {
+    if (!passaNaFinalidade(im)) return false;
     if (tipoAtual && (im.tipo || "") !== tipoAtual) return false;
     if (!filtro) return true;
     var alvo = [im.titulo, im.local, im.tipo, im.finalidade, im.descricao].join(" ").toLowerCase();
@@ -262,7 +280,6 @@
       img.hidden = false;
       img.src = fotos[fotoAtiva];
       $("#casaModalSemFoto").hidden = true;
-      preencherVizinhas(fotos);
     }
     var total = fotos.length;
     $("#setaEsqCasa").hidden = total <= 1;
@@ -274,47 +291,6 @@
     for (var k = 0; k < minis.length; k++) {
       minis[k].classList.toggle("ativa", Number(minis[k].dataset.foto) === fotoAtiva);
     }
-  }
-
-  /* Coloca a foto anterior e a próxima nas laterais do trilho */
-  function preencherVizinhas(fotos) {
-    var prev = $("#casaSlidePrev");
-    var next = $("#casaSlideNext");
-    var total = fotos.length;
-    if (!prev || !next) return;
-    if (total > 1) {
-      prev.hidden = false; next.hidden = false;
-      prev.src = fotos[(fotoAtiva - 1 + total) % total];
-      next.src = fotos[(fotoAtiva + 1) % total];
-    } else {
-      prev.hidden = true; next.hidden = true;
-      prev.removeAttribute("src"); next.removeAttribute("src");
-    }
-    centralizarTrilho(false);
-  }
-
-  function centralizarTrilho(animar) {
-    var trilho = $("#casaTrilho");
-    if (!trilho) return;
-    if (animar) {
-      trilho.classList.add("animando");
-      setTimeout(function () { trilho.classList.remove("animando"); }, 300);
-    } else {
-      trilho.classList.remove("animando");
-    }
-    trilho.style.transform = "translate3d(-100%, 0, 0)";
-  }
-
-  /* Troca de foto com o trilho deslizando (usada pelas setas e pelas miniaturas) */
-  function deslizarPara(i) {
-    var trilho = $("#casaTrilho");
-    if (!trilho) { pintarFoto(i); return; }
-    trilho.classList.add("animando");
-    trilho.style.transform = "translate3d(-200%, 0, 0)";
-    setTimeout(function () {
-      trilho.classList.remove("animando");
-      pintarFoto(i);
-    }, 280);
   }
 
   function fecharCasa() {
@@ -355,6 +331,20 @@
       });
     }
 
+    var fins = document.querySelectorAll("#finalidadeCliente .fin");
+    for (var k = 0; k < fins.length; k++) {
+      fins[k].addEventListener("click", function (ev) {
+        var b = ev.currentTarget;
+        finalidadeAtual = b.dataset.finalidade || "";
+        for (var j = 0; j < fins.length; j++) {
+          var ativo = fins[j] === b;
+          fins[j].classList.toggle("ativo", ativo);
+          fins[j].setAttribute("aria-selected", ativo ? "true" : "false");
+        }
+        renderizar();
+      });
+    }
+
     var chips = document.querySelectorAll("#tiposCliente .chip");
     for (var i = 0; i < chips.length; i++) {
       chips[i].addEventListener("click", function (ev) {
@@ -378,68 +368,29 @@
       if (ev.target === fundo) fecharCasa();
     });
     var esq = $("#setaEsqCasa");
-    if (esq) esq.addEventListener("click", function (ev) { ev.stopPropagation(); deslizarPara(fotoAtiva - 1); });
+    if (esq) esq.addEventListener("click", function (ev) { ev.stopPropagation(); pintarFoto(fotoAtiva - 1); });
     var dir = $("#setaDirCasa");
-    if (dir) dir.addEventListener("click", function (ev) { ev.stopPropagation(); deslizarPara(fotoAtiva + 1); });
+    if (dir) dir.addEventListener("click", function (ev) { ev.stopPropagation(); pintarFoto(fotoAtiva + 1); });
     var mini = $("#casaModalMiniaturas");
     if (mini) mini.addEventListener("click", function (ev) {
       var b = ev.target.closest(".mini-foto");
       if (b) pintarFoto(Number(b.dataset.foto));
     });
 
-    // arrastar a foto no celular: a imagem acompanha o dedo
+    // arrastar a foto no celular
     var palco = $("#casaModalPalco");
-    var trilho = $("#casaTrilho");
-    if (palco && trilho) {
-      var x0 = null, y0 = null, dx = 0, largura = 1, arrastando = false;
-
+    if (palco) {
+      var x0 = null, y0 = null;
       palco.addEventListener("touchstart", function (ev) {
-        if (ev.touches.length !== 1) return;
-        var fotos = casaAberta ? imagensDe(casaAberta) : [];
-        if (fotos.length <= 1) return;
-        x0 = ev.touches[0].clientX;
-        y0 = ev.touches[0].clientY;
-        dx = 0;
-        arrastando = false;
-        largura = palco.clientWidth || 1;
-        trilho.classList.remove("animando");
+        x0 = ev.touches[0].clientX; y0 = ev.touches[0].clientY;
       }, { passive: true });
-
-      palco.addEventListener("touchmove", function (ev) {
+      palco.addEventListener("touchend", function (ev) {
         if (x0 === null) return;
-        dx = ev.touches[0].clientX - x0;
-        var dy = ev.touches[0].clientY - (y0 || 0);
-
-        // se o dedo está indo mais para cima/baixo, solta o trilho (rolagem normal)
-        if (!arrastando && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) { x0 = null; return; }
-        if (Math.abs(dx) > 6) arrastando = true;
-
-        // nas pontas segura com resistência (parece que não tem mais foto)
-        var limite = largura;
-        var pos = dx;
-        if ((fotoAtiva === 0 && dx > 0) || (fotoAtiva === imagensDe(casaAberta).length - 1 && dx < 0)) {
-          pos = dx * 0.32;
-        }
-        trilho.style.transform = "translate3d(calc(-100% + " + pos.toFixed(1) + "px), 0, 0)";
+        var dx = ev.changedTouches[0].clientX - x0;
+        var dy = ev.changedTouches[0].clientY - (y0 || 0);
+        if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) pintarFoto(fotoAtiva + (dx < 0 ? 1 : -1));
+        x0 = null; y0 = null;
       }, { passive: true });
-
-      function soltar(ev) {
-        if (x0 === null) return;
-        var total = casaAberta ? imagensDe(casaAberta).length : 0;
-        var limiteTroca = Math.min(70, largura * 0.2);
-        var deveTrocar = Math.abs(dx) > limiteTroca && arrastando;
-        x0 = null;
-
-        if (deveTrocar && total > 1) {
-          deslizarPara(fotoAtiva + (dx < 0 ? 1 : -1));
-        } else {
-          centralizarTrilho(true);   // volta para o lugar
-        }
-        dx = 0; arrastando = false;
-      }
-
-      palco.addEventListener("touchend", soltar, { passive: true });
-      palco.addEventListener("touchcancel", soltar, { passive: true });
     }
 
     document.addEventListener("keydown", function (ev) {

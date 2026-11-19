@@ -10,8 +10,8 @@
 <meta name="color-scheme" content="dark" />
 <meta name="description" content="Casas, apartamentos e terrenos da Públio Imóveis — mais que imóveis, realizamos histórias." />
 <link rel="manifest" href="manifest.webmanifest" />
-<link rel="stylesheet" href="estilo.css?v=14" />
-<link rel="stylesheet" href="estilo-cliente.css?v=5" />
+<link rel="stylesheet" href="estilo.css?v=10" />
+<link rel="stylesheet" href="estilo-cliente.css?v=4" />
 <link rel="stylesheet" href="estilo-abertura.css?v=11" />
 </head>
 <body class="cliente-pagina">
@@ -60,6 +60,22 @@
     <span class="cliente-contador" id="contadorCasas" hidden></span>
   </section>
 
+  <!-- VENDA ou ALUGUEL: a primeira escolha do cliente -->
+  <div class="cliente-finalidade" id="finalidadeCliente" role="tablist" aria-label="Comprar ou alugar">
+    <button type="button" class="fin" role="tab" data-finalidade="Venda" aria-selected="true">
+      <span class="fin-nome">Venda</span>
+      <span class="fin-sub">casas à venda</span>
+    </button>
+    <button type="button" class="fin" role="tab" data-finalidade="Aluguel" aria-selected="false">
+      <span class="fin-nome">Aluguel</span>
+      <span class="fin-sub">casas para alugar</span>
+    </button>
+    <button type="button" class="fin fin-todos" role="tab" data-finalidade="" aria-selected="false">
+      <span class="fin-nome">Todos</span>
+      <span class="fin-sub">venda e aluguel</span>
+    </button>
+  </div>
+
   <div class="cliente-filtros">
     <div class="cliente-busca">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -95,12 +111,7 @@
     <button type="button" class="casa-modal-fechar" id="casaModalFechar" aria-label="Fechar">✕</button>
 
     <div class="casa-modal-palco" id="casaModalPalco">
-      <!-- trilho que acompanha o dedo: foto anterior + atual + próxima -->
-      <div class="casa-trilho" id="casaTrilho">
-        <img class="casa-slide" id="casaSlidePrev" alt="" aria-hidden="true" />
-        <img class="casa-slide" id="casaModalImagem" alt="" />
-        <img class="casa-slide" id="casaSlideNext" alt="" aria-hidden="true" />
-      </div>
+      <img id="casaModalImagem" alt="" />
       <div class="casa-modal-sem-foto" id="casaModalSemFoto" hidden>sem foto</div>
       <button type="button" class="seta seta-esq casa-modal-setas" id="setaEsqCasa" aria-label="Foto anterior">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>

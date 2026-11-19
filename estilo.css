@@ -53,6 +53,7 @@ h3 { font-size: .95rem; }
   z-index: 20;
 }
 .topo-inner {
+  position: relative;
   max-width: 1180px;
   margin: 0 auto;
   display: flex;
@@ -729,130 +730,190 @@ input:focus, select:focus, textarea:focus {
 .resumo-adm li:last-child { border-bottom: 0; }
 .resumo-adm b { color: var(--ouro-claro); font-size: 1.05rem; }
 
+/* ---------------- cadastro só pela descrição ---------------- */
+.form-dica {
+  margin: 0 0 12px;
+  font-size: .86rem;
+  line-height: 1.45;
+  opacity: .78;
+}
+.dados-lidos {
+  margin: -6px 0 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: .84rem;
+  line-height: 1.4;
+  background: rgba(212, 175, 55, .10);
+  border: 1px solid rgba(212, 175, 55, .30);
+  color: #f0e2b8;
+}
+.ajustes {
+  margin: 12px 0;
+  border: 1px solid var(--borda);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, .02);
+}
+.ajustes > summary {
+  cursor: pointer;
+  font-size: .88rem;
+  font-weight: 600;
+  opacity: .9;
+}
+.ajustes[open] > summary { margin-bottom: 10px; }
+.campo-rotulo {
+  margin: 12px 0 4px;
+  font-size: .82rem;
+  font-weight: 600;
+  opacity: .8;
+}
+.videos-miniaturas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.video-mini {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--borda);
+  background: #100f0b;
+  font-size: .82rem;
+}
+.video-icone { color: #e8c766; }
+.video-nome {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: .85;
+}
+
 /* ==========================================================
-   VERSÃO CELULAR — ajustes finos para telas pequenas
-   (não mexe no computador: tudo aqui só vale abaixo de 760px)
+   MODO CLIENTE — aparelho que só vê as casas
+   Some tudo de administração: cadastro, excluir, Área do
+   corretor e Área do desenvolvedor. Fica só a vitrine.
    ========================================================== */
-@media (max-width: 760px) {
-
-  /* ---- Topo: logo em cima, botões numa fileira que rola de lado ---- */
-  .topo { padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
-  .topo-inner {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-  .marca { gap: 9px; }
-  .logo-img { width: 38px; height: 38px; }
-  .marca h1 { font-size: 1.08rem; line-height: 1.15; }
-  .marca p { font-size: .7rem; }
-
-  /* os 4 botões viram uma barra rolável, cada um com toque confortável */
-  .topo-inner > .btn {
-    flex: 0 0 auto;
-    white-space: nowrap;
-    padding: 9px 13px;
-    font-size: .82rem;
-    min-height: 40px;
-  }
-  .marca { flex: 1 1 100%; }
-
-  /* ---- Conteúdo ---- */
-  .conteudo { padding: 12px 12px 80px; }
-  .cartao { padding: 14px; border-radius: 14px; }
-  .cartao h2 { font-size: 1.02rem; margin-bottom: 12px; }
-
-  /* ---- Formulário: campos maiores, 1 por linha ---- */
-  .campo { margin-bottom: 10px; }
-  .campo > span { font-size: .74rem; }
-  input, select, textarea {
-    font-size: 16px;            /* evita o zoom automático do iPhone */
-    padding: 11px 12px;
-    min-height: 44px;
-  }
-  .linha { grid-template-columns: 1fr; gap: 0; }
-  .acoes-form { flex-direction: column; gap: 8px; }
-  .acoes-form .btn { width: 100%; justify-content: center; min-height: 46px; }
-
-  /* ---- Lista de imóveis: card em pé, botões embaixo e largos ---- */
-  .item {
-    grid-template-columns: 72px minmax(0, 1fr);
-    gap: 10px;
-    padding: 10px;
-  }
-  .item img { width: 72px; height: 66px; }
-  .item-info strong { white-space: normal; line-height: 1.25; }
-  .item-acoes {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .item-acoes .btn {
-    width: 100%;
-    justify-content: center;
-    min-height: 42px;
-    font-size: .82rem;
-  }
-
-  /* ---- Ficha do imóvel ---- */
-  .ficha-fotos, .foto-principal { border-radius: 12px; }
-  .seta { width: 38px; height: 38px; }
-  .miniaturas-ficha .thumb { width: 58px; height: 46px; }
-
-  /* ---- Área do corretor: tabelas viram cartões empilhados ---- */
-  .admin { max-width: 100%; }
-  .cartao-login { margin: 16px auto; }
-  .barra-admin { font-size: .82rem; padding: 9px 11px; }
-  .grade-admin { grid-template-columns: 1fr; gap: 12px; }
-
-  .tabela-dispositivos { overflow: visible; }
-  .tabela-dispositivos table,
-  .tabela-dispositivos thead,
-  .tabela-dispositivos tbody,
-  .tabela-dispositivos tr,
-  .tabela-dispositivos td { display: block; width: 100%; }
-  .tabela-dispositivos thead { display: none; }
-
-  .tabela-dispositivos tr {
-    border: 1px solid var(--borda);
-    border-radius: 12px;
-    padding: 10px 12px;
-    margin-bottom: 10px;
-    background: rgba(255, 255, 255, .02);
-  }
-  .tabela-dispositivos tr.eu { border-color: var(--ouro-fosco); }
-  .tabela-dispositivos tr.pendente { border-color: #6a3b3b; }
-  .tabela-dispositivos td { border: 0; padding: 4px 0; }
-  .tabela-dispositivos .disp-nome { font-size: .95rem; }
-  .tabela-dispositivos .disp-id { font-size: .68rem; }
-  .tabela-dispositivos .disp-data::before {
-    content: "visto ";
-    color: var(--texto-suave);
-    font-size: .68rem;
-  }
-  .tabela-dispositivos .sel-cargo { width: 100%; min-height: 42px; margin-top: 4px; }
-  .tabela-dispositivos .acoes-aparelho {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-top: 8px;
-  }
-  .tabela-dispositivos .acoes-aparelho .btn { width: 100%; justify-content: center; min-height: 40px; }
-
-  .adicionar-aparelho { flex-direction: column; align-items: stretch; }
-  .adicionar-aparelho .campo { flex: 1 1 auto; }
-  .adicionar-aparelho .btn { width: 100%; justify-content: center; min-height: 46px; }
-
-  .resumo-adm li { padding: 8px 0; font-size: .85rem; }
-  .form-usuario { padding: 12px; }
+body.modo-cliente #form,
+body.modo-cliente #cartoesAdm,
+body.modo-cliente #caixaPedido,
+body.modo-cliente #btnNovo,
+body.modo-cliente #btnAdmin,
+body.modo-cliente #btnDesenvolvedor,
+body.modo-cliente #btnAtualizar,
+body.modo-cliente .btn-excluir,
+body.modo-cliente [data-acao="excluir"],
+body.modo-cliente [data-acao="editar"] {
+  display: none !important;
 }
 
-/* Telas bem estreitas (até 400px) */
-@media (max-width: 400px) {
-  .topo-inner > .btn { flex: 1 1 calc(50% - 4px); font-size: .78rem; }
-  .marca h1 { font-size: 1rem; }
-  .item-acoes { grid-template-columns: 1fr; }
-  .tabela-dispositivos .acoes-aparelho { grid-template-columns: 1fr; }
+/* a vitrine do cliente ocupa a tela toda, sem a coluna do formulário */
+body.modo-cliente .painel-grade {
+  grid-template-columns: 1fr;
+  max-width: 1240px;
+  margin: 0 auto;
 }
+
+/* aviso discreto de que este aparelho está no modo cliente */
+body.modo-cliente .topo-inner::after {
+  content: "modo cliente — só visualização";
+  position: absolute;
+  right: 16px;
+  bottom: -18px;
+  font-size: .68rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ouro-fosco);
+  opacity: .75;
+  pointer-events: none;
+}
+
+.selo-cargo.cliente { background: rgba(212, 175, 55, .10); color: var(--ouro-claro); border: 1px solid var(--ouro-fosco); }
+
+/* ficha aberta pelo cliente: esconde qualquer ação de edição */
+body.modo-cliente #ficha .acoes-form,
+body.modo-cliente #ficha .btn-perigo { display: none !important; }
+
+/* ---------------- seletor de cargo com seta ---------------- */
+.celula-cargo { white-space: nowrap; }
+.troca-cargo { position: relative; display: inline-block; }
+.btn-cargo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 6px;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+  background: #14120c;
+  color: var(--texto);
+  cursor: pointer;
+  font: inherit;
+}
+.btn-cargo:hover { border-color: var(--ouro-fosco); background: #1b1810; }
+.btn-cargo:focus-visible { outline: 2px solid var(--ouro-claro); outline-offset: 2px; }
+.seta-cargo {
+  font-size: .8rem;
+  color: var(--ouro-claro);
+  line-height: 1;
+  transition: transform .15s ease;
+}
+.btn-cargo[aria-expanded="true"] .seta-cargo { transform: rotate(180deg); }
+
+.lista-cargo {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 210px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--ouro-fosco);
+  background: #12100b;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, .65);
+  display: grid;
+  gap: 2px;
+}
+.lista-cargo[hidden] { display: none; }
+.lista-cargo.para-cima { top: auto; bottom: calc(100% + 6px); }
+.op-cargo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.op-cargo:hover { background: rgba(212, 175, 55, .14); }
+.op-cargo.ativa { background: rgba(212, 175, 55, .20); color: var(--ouro-claro); }
+.op-desc { font-size: .72rem; font-weight: 400; opacity: .65; }
+
+/* ---------------- aviso: cliente na Área do corretor ---------------- */
+.bloqueio-cliente { text-align: center; }
+.bloqueio-cliente .bloqueio-icone { font-size: 2.4rem; line-height: 1; margin-bottom: 10px; }
+.bloqueio-cliente .acoes-form { justify-content: center; }
+.bloqueio-cliente .btn-primario { font-size: 1rem; padding: 12px 22px; }
+
+/* ---------------- lista de cargo ---------------- */
+.op-nome { font-weight: 700; }
+.lista-cargo .op-cargo { gap: 3px; }
+
+/* ---------------- Modo Desenvolvedor: só depois do login ---------------- */
+/* nada da área da equipe aparece antes de entrar com usuário e senha */
+body:not(.dev-logado) #adminPainel,
+body:not(.dev-logado) #adminPainel * { display: none !important; visibility: hidden !important; }
+body:not(.dev-logado) #cartoesAdm,
+body:not(.dev-logado) #cartaoUsuarios { display: none !important; }
+#adminLogin[hidden] { display: none !important; }
+.painel-dev { animation: entrarPainel .25s ease-out; }
+@keyframes entrarPainel { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
