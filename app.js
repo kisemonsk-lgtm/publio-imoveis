@@ -1706,11 +1706,24 @@ async function aplicarModoCliente() {
   document.body.classList.toggle("modo-cliente", cliente);
   document.body.classList.toggle("modo-equipe", !cliente);
 
-  // botões que só a equipe vê
-  const soEquipe = ["btnNovo", "btnAdmin", "btnDesenvolvedor", "btnAtualizar"];
-  for (const id of soEquipe) {
+  // cadastrar/atualizar: só a equipe
+  for (const id of ["btnNovo", "btnAtualizar"]) {
     const b = document.getElementById(id);
     if (b) b.hidden = cliente;
+  }
+  // Área do corretor e Área do desenvolvedor ficam SEMPRE visíveis:
+  // o cliente entra, mas só encontra o aviso e o botão de ir para a área do cliente.
+  const bDev = document.getElementById("btnDesenvolvedor");
+  if (bDev) {
+    bDev.hidden = false;
+    bDev.title = cliente
+      ? "Área do desenvolvedor — precisa da senha do dono"
+      : "Acesso do dono (usuário e senha)";
+  }
+  const bAdm = document.getElementById("btnAdmin");
+  if (bAdm) {
+    bAdm.hidden = false;
+    bAdm.title = cliente ? "Área do corretor — só para a equipe" : "Dispositivos e permissões";
   }
   // na área do cliente o link vira o "voltar" para o site das casas
   const bCliente = document.getElementById("btnAreaCliente");
@@ -1721,14 +1734,27 @@ async function aplicarModoCliente() {
   return cliente;
 }
 
+let modoPedido = "corretor";   // qual porta o usuário abriu: corretor ou desenvolvedor
+
+/* Cliente tentando entrar na Área do corretor: esconde tudo e mostra o aviso */
+function mostrarBloqueioCliente(mostrar) {
+  const bloqueio = document.getElementById("bloqueioCliente");
+  const login = document.getElementById("adminLogin");
+  const painelAdmin = document.getElementById("adminPainel");
+  if (bloqueio) bloqueio.hidden = !mostrar;
+  if (login) login.hidden = mostrar || sessao;
+  if (painelAdmin) painelAdmin.hidden = mostrar || !sessao;
+}
+
 /* A tela nunca fica em branco: se algo demorar, mostra o que já existe no aparelho */
 function mostrarTela(destino) {
   const painel = document.getElementById("painel");
   const ficha = document.getElementById("ficha");
   const admin = document.getElementById("admin");
   if (!painel || !ficha) return;
-  if (modoCliente && destino === "admin") destino = "painel";
   if (admin) admin.hidden = destino !== "admin";
+  // cliente nunca entra no conteúdo da Área do corretor: só o aviso de redirecionar
+  if (modoCliente && destino === "admin") mostrarBloqueioCliente(true);
   const pedido = document.getElementById("caixaPedido");
   if (pedido && destino !== "painel") pedido.hidden = true;
   if (destino === "ficha") { painel.hidden = true; ficha.hidden = false; }
@@ -1970,10 +1996,20 @@ function cargoDe(d) {
 function ehAdmin() { return sessao === true; }
 
 async function abrirAdmin(modo) {
+  // modo pedido: "corretor" (padrão) ou "desenvolvedor"
+  modoPedido = modo === "desenvolvedor" ? "desenvolvedor" : "corretor";
   mostrarTela("admin");
   const login = document.getElementById("adminLogin");
   const painel = document.getElementById("adminPainel");
   if (!login || !painel) return;
+
+  // cliente não usa a Área do corretor: só o aviso e o botão para a área do cliente
+  if (modoCliente && !sessao) {
+    mostrarBloqueioCliente(true);
+    return;
+  }
+  mostrarBloqueioCliente(false);
+
   login.hidden = sessao;
   painel.hidden = !sessao;
   if (!sessao) {
@@ -1990,6 +2026,7 @@ async function abrirAdmin(modo) {
       : "Entre com seu usuário e senha.";
     aviso(document.getElementById("loginAviso"), "");
   } else {
+    mostrarBloqueioCliente(false);
     aplicarTelaPorCargo();
     await carregarPainelAdmin();
   }
@@ -2042,6 +2079,11 @@ function atualizarResumoAdm() {
   if (r3) r3.textContent = String((dispositivosCache || []).filter((d) => !d.liberado).length);
   const r4 = document.getElementById("resumoUsuarios");
   if (r4) r4.textContent = String(usuarios.length);
+}
+
+/* Cliente que tentou entrar na Área do corretor: volta para a área do cliente */
+function irParaAreaCliente() {
+  location.href = "publio-cliente.html";
 }
 
 async function tentarEntrar() {
@@ -2105,14 +2147,15 @@ async function carregarPainelAdmin() {
       <td class="celula-cargo">
         ${podeCargo
           ? `<div class="troca-cargo">
-               <button type="button" class="btn-cargo" data-acao="abrir-cargo" aria-haspopup="listbox" aria-expanded="false">
+               <button type="button" class="btn-cargo" data-acao="abrir-cargo" title="Mudar a função deste aparelho" aria-haspopup="listbox" aria-expanded="false">
                  <span class="selo-cargo ${cargo.classe}">${cargo.nome}</span>
                  <span class="seta-cargo" aria-hidden="true">▾</span>
                </button>
                <div class="lista-cargo" role="listbox" hidden>
                  ${Object.keys(CARGOS).map((k) =>
                    `<button type="button" class="op-cargo${cargo.chave === k ? " ativa" : ""}" role="option" data-cargo="${k}">
-                      ${CARGOS[k].nome}<span class="op-desc">${CARGOS[k].desc || ""}</span>
+                      <span class="op-nome">${CARGOS[k].nome}</span>
+                      <span class="op-desc">${CARGOS[k].desc || ""}</span>
                     </button>`).join("")}
                </div>
              </div>`
@@ -2495,6 +2538,9 @@ function ligarAdmin() {
   if (btnAdmin) btnAdmin.addEventListener("click", () => abrirAdmin());
   const bEntrar = document.getElementById("btnEntrar");
   if (bEntrar) bEntrar.addEventListener("click", tentarEntrar);
+  const bIrCliente = document.getElementById("btnIrAreaCliente");
+  if (bIrCliente) bIrCliente.addEventListener("click", irParaAreaCliente);
+
   const bVoltar = document.getElementById("btnSairAdmin");
   if (bVoltar) bVoltar.addEventListener("click", () => mostrarTela("painel"));
   const bSair = document.getElementById("btnSair");

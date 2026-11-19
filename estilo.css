@@ -897,3 +897,13 @@ body.modo-cliente #ficha .btn-perigo { display: none !important; }
 .op-cargo:hover { background: rgba(212, 175, 55, .14); }
 .op-cargo.ativa { background: rgba(212, 175, 55, .20); color: var(--ouro-claro); }
 .op-desc { font-size: .72rem; font-weight: 400; opacity: .65; }
+
+/* ---------------- aviso: cliente na Área do corretor ---------------- */
+.bloqueio-cliente { text-align: center; }
+.bloqueio-cliente .bloqueio-icone { font-size: 2.4rem; line-height: 1; margin-bottom: 10px; }
+.bloqueio-cliente .acoes-form { justify-content: center; }
+.bloqueio-cliente .btn-primario { font-size: 1rem; padding: 12px 22px; }
+
+/* ---------------- lista de cargo ---------------- */
+.op-nome { font-weight: 700; }
+.lista-cargo .op-cargo { gap: 3px; }
