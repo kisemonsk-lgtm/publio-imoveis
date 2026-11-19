@@ -2023,8 +2023,10 @@ async function abrirAdmin(modo) {
   }
   mostrarBloqueioCliente(false);
 
+  // o cartão do Modo Desenvolvedor é exclusivo de quem entrou com usuário e senha
   login.hidden = sessao;
   painel.hidden = !sessao;
+  document.body.classList.toggle("dev-logado", sessao === true);
   if (!sessao) {
     const u = document.getElementById("loginUsuario");
     if (u) {

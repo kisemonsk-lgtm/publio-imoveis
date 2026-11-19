@@ -907,3 +907,10 @@ body.modo-cliente #ficha .btn-perigo { display: none !important; }
 /* ---------------- lista de cargo ---------------- */
 .op-nome { font-weight: 700; }
 .lista-cargo .op-cargo { gap: 3px; }
+
+/* ---------------- Modo Desenvolvedor: só depois do login ---------------- */
+/* nada da área da equipe aparece antes de entrar com usuário e senha */
+body:not(.dev-logado) #adminPainel { display: none !important; }
+#adminLogin[hidden] { display: none !important; }
+.painel-dev { animation: entrarPainel .25s ease-out; }
+@keyframes entrarPainel { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
