@@ -14,13 +14,40 @@ const STORE_META = "meta";
 /* ---- Configuração da nuvem ----
    SUPABASE: preencha "url" e "chave" (Project URL e anon/publishable key).
    Enquanto estiverem vazios, o app funciona só neste aparelho (modo local).   */
+/* Vários projetos Supabase = espaço somado.
+   O primeiro da lista é o principal (imóveis, usuários, aparelhos).
+   Os demais servem para guardar fotos quando o primeiro enche. */
+const SUPABASE_PROJETOS = [
+  {
+    nome: "publio-imoveis",
+    url: "https://mefhqkjrszvrjztqdlqe.supabase.co",
+    chave: "sb_publishable_Y_WmSLQXSke0v2O9P8swgw_9uS5tt_P"
+  },
+  {
+    nome: "publio-imoveis-2",
+    url: "https://thmktufvnmpzbvalxnhb.supabase.co",
+    chave: "sb_publishable_6K4VxQ85YzsuxWoBgMfWSA_kgI19nOp"
+  }
+];
+
 const SUPABASE = {
-  url: "https://mefhqkjrszvrjztqdlqe.supabase.co",   // Project URL do projeto publio-imoveis
-  chave: "sb_publishable_Y_WmSLQXSke0v2O9P8swgw_9uS5tt_P",   // publishable key (pode ficar no site)
+  get url() { return SUPABASE_PROJETOS[0].url; },
+  get chave() { return SUPABASE_PROJETOS[0].chave; },
   tabela: "imoveis",
   bucket: "fotos",               // bucket público das fotos
   get ativa() { return !!(this.url && this.chave); }
 };
+
+/* Escolhe em qual projeto a próxima foto vai ser guardada.
+   Usa o primeiro que ainda responder; se um estiver pausado, passa para o seguinte. */
+let projetoFotosAtual = 0;
+function projetoParaFoto() {
+  return SUPABASE_PROJETOS[projetoFotosAtual % SUPABASE_PROJETOS.length];
+}
+function proximoProjetoFotos() {
+  projetoFotosAtual = (projetoFotosAtual + 1) % SUPABASE_PROJETOS.length;
+  return projetoParaFoto();
+}
 
 const NUVEM = {
   get ativa() { return SUPABASE.ativa; },
@@ -219,8 +246,9 @@ async function nuvemEnviarLista(lista) {
 /* ---------- Fotos no Storage do Supabase (bucket público "fotos") ----------
    As fotos vão para o bucket do próprio projeto e o banco guarda só o endereço
    público delas. Assim não há limite de 1 MB por imóvel e as fotos são do dono. */
-function sbStorageUrl(caminho) {
-  return SUPABASE.url.replace(/\/$/, "") + "/storage/v1/object/public/" + SUPABASE.bucket + "/" + caminho;
+function sbStorageUrl(caminho, proj) {
+  const base = (proj && proj.url) || SUPABASE.url;
+  return base.replace(/\/$/, "") + "/storage/v1/object/public/" + SUPABASE.bucket + "/" + caminho;
 }
 
 function dataUrlParaBlob(dataUrl) {
@@ -234,14 +262,29 @@ function dataUrlParaBlob(dataUrl) {
 
 /* Envia a foto para o bucket e devolve o endereço público dela */
 async function enviarFotoParaServidor(dataUrl) {
+  let ultimoErro = null;
+  for (let tentativa = 0; tentativa < SUPABASE_PROJETOS.length; tentativa++) {
+    const proj = projetoParaFoto();
+    try {
+      const endereco = await enviarFotoParaProjeto(dataUrl, proj);
+      if (endereco) return endereco;
+    } catch (e) {
+      ultimoErro = e;
+      proximoProjetoFotos();   // projeto fora do ar: tenta o seguinte
+    }
+  }
+  throw ultimoErro || new Error("Não foi possível enviar a foto.");
+}
+
+async function enviarFotoParaProjeto(dataUrl, proj) {
   const blob = dataUrlParaBlob(dataUrl);
   const nome = novoId() + ".jpg";
   const caminho = "imoveis/" + nome;
-  const r = await fetch(SUPABASE.url.replace(/\/$/, "") + "/storage/v1/object/" + SUPABASE.bucket + "/" + caminho, {
+  const r = await fetch(proj.url.replace(/\/$/, "") + "/storage/v1/object/" + SUPABASE.bucket + "/" + caminho, {
     method: "POST",
     headers: {
-      "apikey": SUPABASE.chave,
-      "Authorization": "Bearer " + SUPABASE.chave,
+      "apikey": proj.chave,
+      "Authorization": "Bearer " + proj.chave,
       "Content-Type": "image/jpeg",
       "x-upsert": "true",
       "cache-control": "public, max-age=31536000"
@@ -253,7 +296,7 @@ async function enviarFotoParaServidor(dataUrl) {
     try { detalhe = (await r.json()).message || ""; } catch (_) { detalhe = ""; }
     throw new Error("o envio da foto falhou (" + r.status + (detalhe ? ": " + detalhe : "") + ")");
   }
-  return sbStorageUrl(caminho);
+  return sbStorageUrl(caminho, proj);
 }
 
 /* Troca as fotos guardadas no aparelho por endereços na internet */
