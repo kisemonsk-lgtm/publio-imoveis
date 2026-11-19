@@ -265,15 +265,32 @@
   function pintarContato(im) {
     var caixa = $("#casaModalContato");
     if (!caixa) return;
-    var tel = (im && im.telefone || "").trim();
-    var num = numeroWhats(tel);
-    if (!num) { caixa.hidden = true; return; }
+    var bruto = (im && im.telefone || "").trim();
+    if (!bruto) { caixa.hidden = true; return; }
+    var link = linkWhats(bruto);
+    if (!link) { caixa.hidden = true; return; }
     caixa.hidden = false;
     var wa = $("#btnWhatsCasa");
     var ligar = $("#btnLigarCasa");
     var msg = "Olá! Vi o imóvel \"" + (im.titulo || "") + "\" no Públio Imóveis e gostaria de mais informações.";
-    if (wa) wa.href = "https://wa.me/" + num + "?text=" + encodeURIComponent(msg);
-    if (ligar) ligar.href = "tel:+" + num;
+    var sep = link.indexOf("?") !== -1 ? "&" : "?";
+    if (wa) wa.href = link + sep + "text=" + encodeURIComponent(msg);
+    // o botão de ligar só aparece quando o que foi salvo é um número
+    var num = numeroWhats(bruto);
+    if (ligar) {
+      if (num && !/^https?:/i.test(bruto)) { ligar.hidden = false; ligar.href = "tel:+" + num; }
+      else ligar.hidden = true;
+    }
+  }
+
+  /* Aceita tanto o link completo (wa.me/55...) quanto o número puro */
+  function linkWhats(valor) {
+    var v = String(valor || "").trim();
+    if (!v) return "";
+    if (/^https?:\/\//i.test(v)) return v;             // já é link
+    if (/^(wa\.me|api\.whatsapp\.com)\//i.test(v)) return "https://" + v;
+    var num = numeroWhats(v);
+    return num ? "https://wa.me/" + num : "";
   }
 
   function pintarFoto(i) {
