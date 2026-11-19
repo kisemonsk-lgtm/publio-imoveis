@@ -1125,6 +1125,10 @@ function ligarBotaoDesenvolvedor() {
   if (!b || b._ligado) return;
   b._ligado = true;
   b.addEventListener("click", () => {
+    // a Área do desenvolvedor sempre pede usuário e senha de novo
+    sessao = false;
+    acesso = null;
+    try { gravarJSON(CHAVE_ACESSO + "-sessao", false); } catch (_) {}
     try { abrirAdmin("desenvolvedor"); }
     catch (e) { alert("Não consegui abrir a Área do desenvolvedor: " + e.message); }
   });
@@ -1501,6 +1505,8 @@ async function abrirAdmin(modo) {
   login.hidden = sessao;
   painel.hidden = !sessao;
   if (!sessao) {
+    login.style.display = "";        // garante que a caixa aparece, mesmo com CSS teimoso
+    login.style.visibility = "visible";
     const u = document.getElementById("loginUsuario");
     if (u) {
       u.value = modo === "desenvolvedor" ? DONO_USUARIO : (usuarios.length === 1 ? usuarios[0].usuario : "");
