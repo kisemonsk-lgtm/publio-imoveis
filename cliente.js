@@ -271,6 +271,16 @@
     if (!link) { caixa.hidden = true; return; }
     caixa.hidden = false;
     var wa = $("#btnWhatsCasa");
+    if (wa && !wa.dataset.travado) {
+      wa.dataset.travado = "1";
+      wa.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        var destino = wa.getAttribute("href") || "";
+        if (!/^https?:/i.test(destino)) return;
+        ev.preventDefault();
+        window.location.href = destino;   // sai da página para o WhatsApp
+      });
+    }
     var ligar = $("#btnLigarCasa");
     var msg = "Olá! Vi o imóvel \"" + (im.titulo || "") + "\" no Públio Imóveis e gostaria de mais informações.";
     var sep = link.indexOf("?") !== -1 ? "&" : "?";
