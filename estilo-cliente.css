@@ -582,36 +582,13 @@ body.casa-aberta { overflow: hidden; }
   }
 }
 
-/* ---------- Botões Comprar / Alugar (finalidade) ---------- */
+/* ---------- Venda / Aluguel (mesmo estilo dos filtros de tipo) ---------- */
 .cliente-finalidades {
   display: flex;
   gap: 8px;
-  padding: 2px 0 10px;
-  flex-wrap: wrap;
-}
-.chip-finalidade {
-  font: inherit;
-  font-size: .86rem;
-  font-weight: 700;
-  white-space: nowrap;
-  padding: 9px 18px;
-  border-radius: 999px;
-  cursor: pointer;
-  color: var(--texto-suave);
-  background: #16140f;
-  border: 1px solid var(--borda);
-  transition: background .18s, color .18s, border-color .18s;
-}
-.chip-finalidade:hover { border-color: var(--ouro-fosco); color: var(--texto); }
-.chip-finalidade.ativo {
-  background: linear-gradient(145deg, var(--ouro-claro), var(--ouro-fosco));
-  color: #17140a;
-  border-color: transparent;
-  box-shadow: 0 4px 14px rgba(212, 175, 55, .22);
-}
-@media (max-width: 520px) {
-  .cliente-finalidades { gap: 6px; }
-  .chip-finalidade { flex: 1 1 auto; text-align: center; padding: 10px 12px; font-size: .82rem; }
+  overflow-x: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: thin;
 }
 
 /* ---------- Botão de ampliar (lupa) no canto da foto ---------- */
@@ -702,3 +679,10 @@ body.casa-aberta { overflow: hidden; }
   pointer-events: none;
 }
 .zoom-camada.mexeu .zoom-dica { opacity: 0; }
+
+/* ---------- Venda / Aluguel no mesmo estilo dos filtros de tipo ---------- */
+#finalidadesCliente { padding-bottom: 4px; }
+#finalidadesCliente .chip {
+  padding: 9px 18px;
+  font-size: .84rem;
+}

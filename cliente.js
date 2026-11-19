@@ -495,7 +495,7 @@
       });
     }
 
-    var chipsFin = document.querySelectorAll("#finalidadesCliente .chip-finalidade");
+    var chipsFin = document.querySelectorAll("#finalidadesCliente .chip");
     for (var f = 0; f < chipsFin.length; f++) {
       chipsFin[f].addEventListener("click", function (ev) {
         var b = ev.currentTarget;
