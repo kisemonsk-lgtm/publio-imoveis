@@ -11,7 +11,7 @@
 <meta name="description" content="Casas, apartamentos e terrenos da Públio Imóveis — mais que imóveis, realizamos histórias." />
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="stylesheet" href="estilo.css?v=14" />
-<link rel="stylesheet" href="estilo-cliente.css?v=7" />
+<link rel="stylesheet" href="estilo-cliente.css?v=8" />
 <link rel="stylesheet" href="estilo-abertura.css?v=11" />
 </head>
 <body class="cliente-pagina">
@@ -65,6 +65,12 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <input id="buscaCliente" type="search" placeholder="Buscar por cidade, bairro ou título..." autocomplete="off" />
     </div>
+    <div class="cliente-finalidades" id="finalidadesCliente">
+      <button type="button" class="chip-finalidade ativo" data-finalidade="">Tudo</button>
+      <button type="button" class="chip-finalidade" data-finalidade="Venda">🏷️ Comprar</button>
+      <button type="button" class="chip-finalidade" data-finalidade="Aluguel">🔑 Alugar</button>
+    </div>
+
     <div class="cliente-tipos" id="tiposCliente">
       <button type="button" class="chip ativo" data-tipo="">Todos</button>
       <button type="button" class="chip" data-tipo="Casa">Casas</button>
@@ -129,7 +135,7 @@
   </div>
 </div>
 
-<script src="cliente.js?v=6"></script>
+<script src="cliente.js?v=7"></script>
 <script src="abertura.js?v=12"></script>
 </body>
 </html>

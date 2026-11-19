@@ -21,6 +21,7 @@
 
   var imoveis = [];
   var filtro = "";
+  var finalidadeAtual = "";
   var tipoAtual = "";
   var buscando = false;
 
@@ -150,6 +151,7 @@
   }
 
   function passaNoFiltro(im) {
+    if (finalidadeAtual && (im.finalidade || "") !== finalidadeAtual) return false;
     if (tipoAtual && (im.tipo || "") !== tipoAtual) return false;
     if (!filtro) return true;
     var alvo = [im.titulo, im.local, im.tipo, im.finalidade, im.descricao].join(" ").toLowerCase();
@@ -351,6 +353,16 @@
     if (busca) {
       busca.addEventListener("input", function (ev) {
         filtro = ev.target.value.trim().toLowerCase();
+        renderizar();
+      });
+    }
+
+    var chipsFin = document.querySelectorAll("#finalidadesCliente .chip-finalidade");
+    for (var f = 0; f < chipsFin.length; f++) {
+      chipsFin[f].addEventListener("click", function (ev) {
+        var b = ev.currentTarget;
+        finalidadeAtual = b.dataset.finalidade || "";
+        for (var j = 0; j < chipsFin.length; j++) chipsFin[j].classList.toggle("ativo", chipsFin[j] === b);
         renderizar();
       });
     }
