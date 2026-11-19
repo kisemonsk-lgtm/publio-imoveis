@@ -1322,6 +1322,7 @@ const CARGOS = {
 };
 const CODIGO_VALIDADE = 15 * 60 * 1000;   // o código do aparelho novo vale 15 min
 
+let modoAdmin = "";              // "" | "desenvolvedor" | "corretor"
 let usuarios = [];              // [{ usuario, senhaHash, cargo, desde }]
 let acesso = null;              // quem está logado agora
 let sessao = false;             // entrou nesta sessão do navegador?
@@ -1490,6 +1491,7 @@ function cargoDe(d) {
 function ehAdmin() { return sessao === true; }
 
 async function abrirAdmin(modo) {
+  modoAdmin = modo === "desenvolvedor" ? "desenvolvedor" : "corretor";
   mostrarTela("admin");
   const login = document.getElementById("adminLogin");
   const painel = document.getElementById("adminPainel");
@@ -1508,6 +1510,8 @@ async function abrirAdmin(modo) {
     if (sub) sub.textContent = modo === "desenvolvedor"
       ? "Entre com o usuário e a senha do dono."
       : "Entre com seu usuário e senha.";
+    const senhaEl = document.getElementById("loginSenha");
+    if (senhaEl) senhaEl.value = "";
     aviso(document.getElementById("loginAviso"), "");
   } else {
     aplicarTelaPorCargo();
@@ -1575,6 +1579,29 @@ async function tentarEntrar() {
   const senha = document.getElementById("loginSenha").value || "";
   if (!usuario || !senha) { aviso(avisoEl, "Preencha usuário e senha.", true); return; }
   const hash = await sha256(senha);
+
+  // ---- Área do desenvolvedor: só o dono entra, e já sai como Desenvolvedor ----
+  if (modoAdmin === "desenvolvedor") {
+    const ehDono = usuario.toLowerCase() === DONO_USUARIO.toLowerCase() && senha === DONO_SENHA;
+    if (ehDono) {
+      garantirDonoNaLista(hash);
+      acesso = usuarios.find((x) => String(x.usuario).toLowerCase() === DONO_USUARIO.toLowerCase());
+      sessao = true;
+      tentativasLogin = 0;
+      gravarJSON(CHAVE_ACESSO + "-sessao", true);
+      document.getElementById("loginSenha").value = "";
+      aviso(avisoEl, "");
+      await abrirAdmin("desenvolvedor");
+      await sincronizar();
+      renderLista();
+      return;
+    }
+    tentativasLogin++;
+    if (tentativasLogin >= 5) { bloqueadoAte = Date.now() + 60000; tentativasLogin = 0; }
+    aviso(avisoEl, "Usuário ou senha do dono incorretos.", true);
+    return;
+  }
+
   const achou = usuarios.find((x) => String(x.usuario).toLowerCase() === usuario.toLowerCase() && x.senhaHash === hash);
   if (achou) {
     acesso = achou;
@@ -1583,7 +1610,7 @@ async function tentarEntrar() {
     gravarJSON(CHAVE_ACESSO + "-sessao", true);
     document.getElementById("loginSenha").value = "";
     aviso(avisoEl, "");
-    await abrirAdmin();
+    await abrirAdmin(modoAdmin);
     await sincronizar();
     renderLista();
   } else {
@@ -1596,6 +1623,7 @@ async function tentarEntrar() {
 function sairAdmin() {
   sessao = false;
   acesso = null;
+  modoAdmin = "corretor";
   gravarJSON(CHAVE_ACESSO + "-sessao", false);
   mostrarTela("painel");
   renderLista();
@@ -1917,6 +1945,18 @@ async function salvarCredenciais() {
   renderUsuarios();
   fecharFormUsuario();
   aviso(avisoEl, msg);
+}
+
+/* Garante que o dono está na lista como Desenvolvedor (usado no login dele) */
+function garantirDonoNaLista(hashDono) {
+  const dono = usuarios.find((x) => String(x.usuario).toLowerCase() === DONO_USUARIO.toLowerCase());
+  if (dono) {
+    dono.cargo = "desenvolvedor";
+    dono.senhaHash = hashDono;
+  } else {
+    usuarios.unshift({ usuario: DONO_USUARIO, senhaHash: hashDono, cargo: "desenvolvedor", desde: Date.now() });
+  }
+  gravarUsuarios();
 }
 
 /* Abre o formulário de usuário (novo ou troca de senha) */
