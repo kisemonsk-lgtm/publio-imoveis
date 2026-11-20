@@ -16,7 +16,7 @@
     chave: "sb_publishable_Y_WmSLQXSke0v2O9P8swgw_9uS5tt_P",
     tabela: "imoveis"
   };
-  var CAMPOS = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
+  var CAMPOS = "id,titulo,tipo,finalidade,telefone,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
   var INTERVALO = 60000;      // busca novidades na nuvem a cada 1 minuto
 
   var imoveis = [];
@@ -55,7 +55,7 @@
   function sbUrl(caminho) { return SUPABASE.url.replace(/\/$/, "") + "/rest/v1/" + caminho; }
 
   /* ---------------- leitura (só GET) ---------------- */
-  var CAMPOS_BASE = "id,titulo,tipo,finalidade,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
+  var CAMPOS_BASE = "id,titulo,tipo,finalidade,telefone,preco,local,descricao,imagem,imagens,criadoEm,atualizadoEm";
   var temColunaVideos = null;
 
   function lerImoveis() {
@@ -82,7 +82,6 @@
           tipo: l.tipo || "",
           finalidade: l.finalidade || "",
         telefone: l.telefone || "",
-          telefone: l.telefone || "",
           preco: l.preco || "",
           local: l.local || "",
           descricao: l.descricao || "",
@@ -254,11 +253,14 @@
     try { $("#casaModalFechar").focus({ preventScroll: true }); } catch (_) {}
   }
 
-  /* Deixa o telefone só com números, no formato que o WhatsApp espera */
+  /* Deixa o telefone só com números, no formato que o WhatsApp espera.
+     Número brasileiro salvo sem o código do país ganha o 55 na frente. */
   function numeroWhats(tel) {
     var d = String(tel || "").replace(/\D/g, "");
     if (!d) return "";
-    if (d.length <= 11) d = "55" + d;       // Brasil por padrão
+    // 10 ou 11 dígitos: número do Brasil sem o 55 (ex.: 77 99838-4772)
+    if (d.length === 10 || d.length === 11) return "55" + d;
+    // 12 ou 13 dígitos: já vem com o 55
     return d;
   }
 
@@ -276,7 +278,7 @@
       wa.addEventListener("click", function (ev) {
         ev.stopPropagation();
         var destino = wa.getAttribute("href") || "";
-        if (!/^https?:/i.test(destino)) return;
+        if (!/^https?:/i.test(destino)) { ev.preventDefault(); return; }
         ev.preventDefault();
         window.location.href = destino;   // sai da página para o WhatsApp
       });
@@ -293,12 +295,24 @@
     }
   }
 
-  /* Aceita tanto o link completo (wa.me/55...) quanto o número puro */
+  /* Aceita tanto o link completo (wa.me/55...) quanto o número puro.
+     Se o link salvo estiver sem o 55, o número é corrigido aqui. */
   function linkWhats(valor) {
     var v = String(valor || "").trim();
     if (!v) return "";
-    if (/^https?:\/\//i.test(v)) return v;             // já é link
-    if (/^(wa\.me|api\.whatsapp\.com)\//i.test(v)) return "https://" + v;
+    if (/^https?:\/\//i.test(v)) {
+      // wa.me/77998384772  ->  wa.me/5577998384772
+      var m = v.match(/^(?:https?:)?\/\/wa\.me\/(\d+)/i);
+      if (m) return "https://wa.me/" + numeroWhats(m[1]);
+      // api.whatsapp.com/send?phone=77998384772 -> phone=5577998384772
+      if (/api\.whatsapp\.com\/send/i.test(v)) {
+        return v.replace(/([?&]phone=)(\d+)/i, function (_, pre, num) {
+          return pre + numeroWhats(num);
+        });
+      }
+      return v;
+    }
+    if (/^(wa\.me|api\.whatsapp\.com)\//i.test(v)) return linkWhats("https://" + v);
     var num = numeroWhats(v);
     return num ? "https://wa.me/" + num : "";
   }
